@@ -120,51 +120,96 @@ router.get('/history', async (req, res) => {
   }
 });
 
-// GET /api/stats/timeseries?bucket=hourly|daily
+// GET /api/stats/timeseries?view=hourly|daily&interval=15min|30min|1hr
+// Returns per-difficulty keyed data per bucket for grouped bar + best-fit line chart.
 router.get('/timeseries', async (req, res) => {
   try {
     if (!req.userId) return res.json({ series: [] });
-    const bucket = req.query.bucket === 'hourly' ? 'hourly' : 'daily';
-    const hours = bucket === 'hourly' ? 48 : 720;
-    const since = new Date(Date.now() - hours * 3600000);
+
+    const view     = req.query.view === 'daily' ? 'daily' : 'hourly';
+    const interval = ['15min', '30min', '1hr'].includes(req.query.interval)
+      ? req.query.interval : '1hr';
+
+    let bucketMs, numBuckets, dateKeyFn;
+
+    if (view === 'daily') {
+      // Day-level buckets, 30 days
+      bucketMs = 24 * 3600000;
+      numBuckets = 30;
+      dateKeyFn = (ts) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      };
+    } else {
+      // Sub-hour buckets
+      if (interval === '15min') {
+        bucketMs = 15 * 60000;
+        numBuckets = 96; // 24 hours
+      } else if (interval === '30min') {
+        bucketMs = 30 * 60000;
+        numBuckets = 96; // 48 hours
+      } else {
+        bucketMs = 60 * 60000;
+        numBuckets = 72; // 3 days
+      }
+      dateKeyFn = (ts) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} `
+             + `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      };
+    }
+
+    const now = Date.now();
+    const currentBucketTs = Math.floor(now / bucketMs) * bucketMs;
+    const startBucketTs = currentBucketTs - (numBuckets - 1) * bucketMs;
+
+    // Pre-populate all continuous buckets
+    const groups = {};
+    for (let ts = startBucketTs; ts <= currentBucketTs; ts += bucketMs) {
+      const key = dateKeyFn(ts);
+      groups[key] = { date: key, bucketTs: ts };
+    }
+
+    const since = new Date(startBucketTs);
     const attempts = await Attempt.find({ userId: req.userId, createdAt: { $gte: since } })
-      .select('correct elapsedMs createdAt')
+      .select('correct elapsedMs createdAt difficulty')
       .lean();
 
-    const groups = {};
     for (const a of attempts) {
-      const d = new Date(a.createdAt);
-      let key;
-      if (bucket === 'hourly') {
-        const yr = d.getFullYear();
-        const mo = String(d.getMonth() + 1).padStart(2, '0');
-        const dy = String(d.getDate()).padStart(2, '0');
-        const hr = String(d.getHours()).padStart(2, '0');
-        key = `${yr}-${mo}-${dy} ${hr}:00`;
-      } else {
-        key = d.toISOString().slice(0, 10);
-      }
-      if (!groups[key]) groups[key] = { date: key, solved: 0, correct: 0, times: [] };
-      groups[key].solved++;
-      if (a.correct) groups[key].correct++;
-      if (a.elapsedMs) groups[key].times.push(a.elapsedMs);
-    }
-    const series = Object.values(groups)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((g) => ({
-        date: g.date,
-        solved: g.solved,
-        correct: g.correct,
-        accuracy: g.solved ? Math.round((100 * g.correct) / g.solved) : 0,
-        avgTimeSec: g.times.length ? Number((g.times.reduce((s, t) => s + t, 0) / (g.times.length * 1000)).toFixed(1)) : null,
-      }));
+      const ts       = new Date(a.createdAt).getTime();
+      const bucketTs = Math.floor(ts / bucketMs) * bucketMs;
+      const key      = dateKeyFn(bucketTs);
 
-    res.json({ series });
+      if (!groups[key]) groups[key] = { date: key, bucketTs };
+      const diff = a.difficulty;
+      if (!groups[key][diff]) groups[key][diff] = { solved: 0, correct: 0, times: [] };
+      groups[key][diff].solved++;
+      if (a.correct) groups[key][diff].correct++;
+      if (a.elapsedMs > 0) groups[key][diff].times.push(a.elapsedMs);
+    }
+
+    const series = Object.values(groups)
+      .sort((a, b) => a.bucketTs - b.bucketTs)
+      .map((g) => {
+        const point = { date: g.date };
+        for (const tier of ['low', 'medium', 'high']) {
+          const t = g[tier];
+          point[`${tier}_solved`]     = t ? t.solved : 0;
+          point[`${tier}_accuracy`]   = t ? Math.round((100 * t.correct) / t.solved) : null;
+          point[`${tier}_avgTimeSec`] = t && t.times.length
+            ? Number((t.times.reduce((s, x) => s + x, 0) / (t.times.length * 1000)).toFixed(1))
+            : null;
+        }
+        return point;
+      });
+
+    res.json({ series, view, interval });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to load timeseries' });
   }
 });
+
 
 // GET /api/stats/weakest — powers Weakness Mode + Dashboard's "do this next".
 router.get('/weakest', async (req, res) => {

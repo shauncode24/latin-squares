@@ -52,7 +52,8 @@ export const api = {
 
   getStats:      () => request('GET', '/api/stats'),
   getHistory:    () => request('GET', '/api/stats/history'),
-  getTimeseries: (bucket = 'daily') => request('GET', `/api/stats/timeseries?bucket=${bucket}`),
+  getTimeseries: (view = 'hourly', interval = '1hr') =>
+    request('GET', `/api/stats/timeseries?view=${view}&interval=${interval}`),
   getWeakest:    () => request('GET', '/api/stats/weakest'),
   getTrend:      () => request('GET', '/api/stats/trend'), // NEW
 

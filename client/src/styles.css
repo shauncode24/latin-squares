@@ -678,6 +678,8 @@
   flex-direction: column;
   gap: 20px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-bottom: 32px;
 }
 
@@ -756,6 +758,9 @@
   padding: 28px;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .card-header-simple h3 {
   font-size: 16.5px;
@@ -767,6 +772,9 @@
 /* Chart card */
 .chart-card {
   padding: 26px 28px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .chart-card-header {
   display: flex;
@@ -797,32 +805,340 @@
 }
 .chart-seg-btn {
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 7px 16px;
+  padding: 5px 11px;
   border: none;
   background: transparent;
   color: #4b5563;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 .chart-seg-btn.active {
   background: #ffffff;
   color: var(--ink);
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
-.chart-wrapper {
+/* ─── Scrollable chart ───────────────────────────────────── */
+.chart-scroll-outer {
   width: 100%;
-  min-height: 270px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f3f4f6;
+  padding-bottom: 8px;
+  cursor: grab;
+  user-select: none;
+}
+.chart-scroll-outer:active {
+  cursor: grabbing;
+}
+.chart-scroll-outer::-webkit-scrollbar {
+  height: 8px;
+}
+.chart-scroll-outer::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 99px;
+}
+.chart-scroll-outer::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 99px;
+  border: 2px solid #f3f4f6;
+}
+.chart-scroll-outer::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.chart-scroll-inner {
+  min-width: 100%;
+}
+.chart-scroll-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-soft);
+  padding: 0 0 8px;
+  letter-spacing: 0.03em;
 }
 .chart-state-box {
-  height: 270px;
+  height: 280px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   color: var(--ink-soft);
+}
+
+/* ─── Tier legend (replaces old tier filter) ─────────────── */
+.chart-tier-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.chart-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Chart filter row ───────────────────────────────────── */
+.chart-filter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chart-filter-row::-webkit-scrollbar { display: none; }
+.chart-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+.chart-filter-group + .chart-filter-group {
+  padding-left: 12px;
+  margin-left: 0;
+  border-left: 1px solid var(--line);
+}
+.chart-filter-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* ─── Bottom legend row ──────────────────────────────────── */
+.chart-bar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 10px 0 2px;
+}
+.chart-legend-trend {
+  gap: 8px;
+}
+.chart-legend-line-dot {
+  width: 18px;
+  height: 2px;
+  background: #374151;
+  border-radius: 2px;
+  flex-shrink: 0;
+  position: relative;
+}
+.chart-legend-line-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #374151;
+}
+
+/* ─── Tooltip trend row ──────────────────────────────────── */
+.chart-tooltip-trend {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 5px;
+  margin-top: 2px;
+}
+.perf-chart-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 1024px) {
+  .perf-chart-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ─── Chart controls row (metric tabs + tier filter side by side) */
+.chart-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.metric-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.metric-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.metric-tab:hover {
+  border-color: rgba(0,0,0,0.18);
+  color: var(--ink);
+}
+.metric-tab.active {
+  background: color-mix(in srgb, var(--tab-color, #6366f1) 10%, white);
+  border-color: var(--tab-color, #6366f1);
+  color: var(--tab-color, #6366f1);
+}
+.metric-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Insight callout ────────────────────────────────────── */
+.chart-insight-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: #f8f9ff;
+  border: 1px solid #e0e3ff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #374151;
+  margin-bottom: 14px;
+  line-height: 1.55;
+}
+.insight-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ─── Speed vs Target card ───────────────────────────────── */
+.speed-target-card {
+  padding: 26px 28px;
+}
+.speed-tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.speed-tier-row {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.speed-tier-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.speed-tier-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.speed-val {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+.speed-val.under-target { color: #15803d; }
+.speed-val.over-target  { color: #b91c1c; }
+.speed-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.speed-val.under-target + .speed-badge {
+  background: #dcfce7;
+  color: #15803d;
+}
+.speed-val.over-target + .speed-badge {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.speed-best {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-left: auto;
+}
+.speed-no-data {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.speed-bar-track {
+  position: relative;
+  height: 10px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: visible;
+}
+.speed-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.speed-bar-fill.fill-good { background: linear-gradient(90deg, #34d399, #10b981); }
+.speed-bar-fill.fill-bad  { background: linear-gradient(90deg, #f87171, #dc2626); }
+.speed-target-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2.5px;
+  background: #374151;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+.speed-track-labels {
+  display: flex;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  position: relative;
+}
+.target-label-text {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-weight: 600;
+  color: #374151;
 }
 .chart-tooltip {
   background: rgba(17, 24, 39, 0.95);
@@ -865,6 +1181,67 @@
   font-weight: 700;
   color: #ffffff;
   margin-left: auto;
+}
+
+/* ─── Tier filter toggle ─────────────────────────────────── */
+.tier-filter-group {
+  display: inline-flex;
+  background: #f3f4f6;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+  border: 1px solid rgba(0,0,0,0.04);
+  flex-shrink: 0;
+}
+.tier-filter-btn {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tier-filter-btn:hover { color: var(--ink); }
+.tier-filter-btn.active {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.tier-filter-btn.active.tfb-low   { color: #0369a1; }
+.tier-filter-btn.active.tfb-medium { color: #b45309; }
+.tier-filter-btn.active.tfb-high  { color: #b91c1c; }
+
+/* ─── Insight callout SVG icon ───────────────────────────── */
+.chart-insight-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: #f8f9ff;
+  border: 1px solid #e0e3ff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #374151;
+  margin-bottom: 14px;
+  line-height: 1.55;
+}
+.insight-svg-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #6366f1;
+  width: 15px;
+  height: 15px;
+}
+.insight-svg-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke: #6366f1;
 }
 
 /* Bottom 2-column grid */

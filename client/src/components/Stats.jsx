@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend,
+  ComposedChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { api } from '../api';
 import { timeStr, relTime } from '../lib/format';
@@ -11,148 +11,379 @@ const TIERS = ['low', 'medium', 'high'];
 const TIER_LABEL = { low: 'Low', medium: 'Medium', high: 'High' };
 const HISTORY_PAGE = 8;
 
-function formatChartDate(iso, bucket) {
+const TIER_COLORS = {
+  low:    '#6366f1',
+  medium: '#f59e0b',
+  high:   '#ef4444',
+};
+
+const METRIC_TABS = [
+  { key: 'solved',     label: 'Volume',   unit: '',  suffix: '_solved' },
+  { key: 'accuracy',   label: 'Accuracy', unit: '%', suffix: '_accuracy' },
+  { key: 'avgTimeSec', label: 'Speed',    unit: 's', suffix: '_avgTimeSec' },
+];
+
+const TIER_TARGETS_SEC = { low: 20, medium: 50, high: 75 };
+const MIN_PX_PER_POINT = 56;
+
+// ─── Date formatter ──────────────────────────────────────────────────────────
+function fmtDate(iso, view) {
   if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) {
-    if (bucket === 'hourly') return iso.slice(11, 16);
-    return iso;
+  if (view === 'daily') {
+    // iso: "2026-09-13"
+    const d = new Date(iso + 'T00:00:00');
+    return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
-  if (bucket === 'hourly') {
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  // hourly: "2026-09-13 14:15"
+  const time = iso.slice(11, 16); // "14:15"
+  if (iso.slice(11, 13) === '00' && iso.slice(14, 16) === '00') {
+    // midnight → show date
+    const d = new Date(iso.replace(' ', 'T') + ':00');
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return time;
 }
 
-function CustomTooltip({ active, payload, label, bucket }) {
-  if (!active || !payload || !payload.length) return null;
-  const dateStr = formatChartDate(label, bucket);
+// ─── Custom Tooltip ──────────────────────────────────────────────────────────
+function BarTooltip({ active, payload, label, metric, diffFilter, view }) {
+  if (!active || !payload?.length) return null;
+  const mt = METRIC_TABS.find(t => t.key === metric);
+  const unit = mt?.unit || '';
+  const suffix = mt?.suffix || '_solved';
+
+  const barEntries = payload.filter(p => p.dataKey !== '_trend' && p.value != null && p.value !== 0);
+  const trendEntry = payload.find(p => p.dataKey === '_trend');
+
   return (
     <div className="chart-tooltip">
-      <div className="chart-tooltip-header">{dateStr}</div>
+      <div className="chart-tooltip-header">{fmtDate(label, view)}</div>
       <div className="chart-tooltip-body">
-        {payload.map((entry, index) => {
-          const seriesColor = entry.dataKey === 'solved' ? '#38bdf8' : '#60a5fa';
-          return (
-            <div key={index} className="chart-tooltip-row">
-              <span className="tooltip-dot" style={{ background: seriesColor }} />
-              <span className="tooltip-label">{entry.name}:</span>
-              <span className="tooltip-val">
-                {entry.name === 'Accuracy' ? `${entry.value}%` : entry.value}
-              </span>
-            </div>
-          );
-        })}
+        {barEntries.map(entry => (
+          <div key={entry.dataKey} className="chart-tooltip-row">
+            <span className="tooltip-dot" style={{ background: entry.fill || entry.stroke }} />
+            <span className="tooltip-label">{entry.name}:</span>
+            <span className="tooltip-val">{entry.value}{unit}</span>
+          </div>
+        ))}
+        {trendEntry?.value != null && (
+          <div className="chart-tooltip-row chart-tooltip-trend">
+            <span className="tooltip-dot" style={{ background: '#374151' }} />
+            <span className="tooltip-label">Trend:</span>
+            <span className="tooltip-val">{trendEntry.value}{unit}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function PerformanceChart() {
-  const [data, setData] = useState(null);
-  const [bucket, setBucket] = useState('daily');
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback((b) => {
-    setLoading(true);
-    api.getTimeseries(b)
-      .then((res) => {
-        setData(res.series || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setData([]);
-        setLoading(false);
-      });
-  }, []);
+// ─── PerformanceChart ─────────────────────────────────────────────────────────
+function PerformanceChart({ byTier, pbs }) {
+  const [data,       setData]       = useState(null);
+  const [view,       setView]       = useState('hourly');
+  const [interval,   setInterval]   = useState('1hr');
+  const [metric,     setMetric]     = useState('solved');
+  const [diffFilter, setDiffFilter] = useState('all');
+  const [loading,    setLoading]    = useState(true);
+  const scrollRef                   = useRef(null);
+  const [containerW, setContainerW] = useState(700);
+
+  // Mouse drag-to-scroll
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const scrollLeftStart = useRef(0);
 
   useEffect(() => {
-    load(bucket);
-  }, [bucket, load]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setContainerW(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Convert vertical mouse wheel into horizontal scroll
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (el.scrollWidth > el.clientWidth) {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const load = useCallback((v, iv) => {
+    setLoading(true);
+    api.getTimeseries(v, iv)
+      .then(res => { setData(res.series || []); setLoading(false); })
+      .catch(() => { setData([]); setLoading(false); });
+  }, []);
+
+  useEffect(() => { load(view, interval); }, [view, interval, load]);
+
+  const mt = METRIC_TABS.find(t => t.key === metric);
+  const suffix = mt?.suffix || '_solved';
+  const unit   = mt?.unit   || '';
+
+  const chartData = data ?? [];
+
+  const chartW      = Math.max(containerW, chartData.length * MIN_PX_PER_POINT);
+  const needsScroll = chartW > containerW + 8;
+
+  // Auto-scroll to end (most recent data point) when new data loads
+  useEffect(() => {
+    if (!loading && chartData.length > 0 && scrollRef.current) {
+      const timer = setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, chartData.length, view, interval]);
+
+  // Drag handlers
+  const handleMouseDown = (e) => {
+    const el = scrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    isDragging.current = true;
+    startX.current = e.pageX - el.offsetLeft;
+    scrollLeftStart.current = el.scrollLeft;
+    el.style.cursor = 'grabbing';
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging.current) return;
+    e.preventDefault();
+    const el = scrollRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - startX.current) * 1.5;
+    el.scrollLeft = scrollLeftStart.current - walk;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (isDragging.current) {
+      isDragging.current = false;
+      if (scrollRef.current) {
+        scrollRef.current.style.cursor = 'grab';
+      }
+    }
+  };
+
+
+  // Bars to show
+  const activeTiers = diffFilter === 'all' ? TIERS : [diffFilter];
+  const barSize     = diffFilter === 'all' ? 10 : 16;
+
+  // Speed vs Target section
+  const tierSpeedData = TIERS.map(t => {
+    const d = byTier[t];
+    const avgSec  = d?.avgTimeMs ? Math.round(d.avgTimeMs / 100) / 10 : null;
+    const target  = TIER_TARGETS_SEC[t];
+    const bestSec = pbs[t] ? Math.round(pbs[t] / 100) / 10 : null;
+    return { tier: t, avgSec, target, bestSec, underTarget: avgSec != null && avgSec <= target };
+  });
 
   return (
-    <div className="stats-card chart-card">
-      <div className="chart-card-header">
-        <div>
-          <h3 className="chart-card-title">Performance & Activity Trend</h3>
-          <p className="chart-card-sub">Track your accuracy and solved drills over time</p>
+    <div className="perf-chart-section">
+      {/* ── Main chart card ── */}
+      <div className="stats-card chart-card">
+
+        {/* Title */}
+        <div className="chart-card-header">
+          <div>
+            <h3 className="chart-card-title">Activity Timeline</h3>
+            <p className="chart-card-sub">Bar chart with trend line — use filters to explore your data</p>
+          </div>
         </div>
-        <div className="chart-seg-group">
-          <button
-            className={`chart-seg-btn${bucket === 'hourly' ? ' active' : ''}`}
-            onClick={() => setBucket('hourly')}
-          >
-            Hour to Hour
-          </button>
-          <button
-            className={`chart-seg-btn${bucket === 'daily' ? ' active' : ''}`}
-            onClick={() => setBucket('daily')}
-          >
-            Day to Day
-          </button>
+
+        {/* ── Filter row ── */}
+        <div className="chart-filter-row">
+
+          {/* View */}
+          <div className="chart-filter-group">
+            <div className="chart-seg-group">
+              <button className={`chart-seg-btn${view === 'hourly' ? ' active' : ''}`} onClick={() => setView('hourly')}>Hourly</button>
+              <button className={`chart-seg-btn${view === 'daily'  ? ' active' : ''}`} onClick={() => setView('daily')}>Daily</button>
+            </div>
+          </div>
+
+          {/* Interval: only when view=hourly */}
+          {view === 'hourly' && (
+            <div className="chart-filter-group">
+              <div className="chart-seg-group">
+                {[{k:'15min',l:'15 min'},{k:'30min',l:'30 min'},{k:'1hr',l:'1 hr'}].map(iv => (
+                  <button
+                    key={iv.k}
+                    className={`chart-seg-btn${interval === iv.k ? ' active' : ''}`}
+                    onClick={() => setInterval(iv.k)}
+                  >{iv.l}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Difficulty */}
+          <div className="chart-filter-group">
+            <div className="chart-seg-group">
+              {[{k:'all',l:'All'},{k:'low',l:'Low'},{k:'medium',l:'Med'},{k:'high',l:'High'}].map(d => (
+                <button
+                  key={d.k}
+                  className={`chart-seg-btn${diffFilter === d.k ? ' active' : ''}`}
+                  onClick={() => setDiffFilter(d.k)}
+                >{d.l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Metric */}
+          <div className="chart-filter-group">
+            <div className="chart-seg-group">
+              {METRIC_TABS.map(tab => (
+                <button
+                  key={tab.key}
+                  className={`chart-seg-btn${metric === tab.key ? ' active' : ''}`}
+                  onClick={() => setMetric(tab.key)}
+                >{tab.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+
+        {/* Scrollable chart */}
+        <div
+          className="chart-scroll-outer"
+          ref={scrollRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+        >
+          {loading ? (
+            <div className="chart-state-box">Loading...</div>
+          ) : !chartData.length ? (
+            <div className="chart-state-box">No activity in this time range yet.</div>
+          ) : (
+            <>
+              {needsScroll && <div className="chart-scroll-hint">← scroll to see full range →</div>}
+              <div className="chart-scroll-inner" style={{ width: chartW }}>
+                <ResponsiveContainer width="100%" height={290}>
+                  <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: -2, bottom: 0 }} barCategoryGap="30%">
+
+                    <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.07)" />
+
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: '#9ca3af' }}
+                      tickFormatter={v => fmtDate(v, view)}
+                      axisLine={false}
+                      tickLine={false}
+                      padding={{ left: 16, right: 16 }}
+                      interval={Math.max(0, Math.ceil(chartData.length / 12) - 1)}
+                    />
+
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#9ca3af' }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={v => `${v}${unit}`}
+                      domain={metric === 'accuracy' ? [0, 100] : ['auto', 'auto']}
+                      width={40}
+                      allowDecimals={metric !== 'solved'}
+                    />
+
+                    <Tooltip content={<BarTooltip metric={metric} diffFilter={diffFilter} view={view} />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+
+                    {/* Grouped bars */}
+                    {activeTiers.map(tier => (
+                      <Bar
+                        key={tier}
+                        dataKey={`${tier}${suffix}`}
+                        name={TIER_LABEL[tier]}
+                        fill={TIER_COLORS[tier]}
+                        radius={[3, 3, 0, 0]}
+                        maxBarSize={barSize}
+                        opacity={0.85}
+                      />
+                    ))}
+
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Legend */}
+              <div className="chart-bar-legend">
+                {activeTiers.map(t => (
+                  <span key={t} className="chart-legend-item">
+                    <span className="chart-legend-dot" style={{ background: TIER_COLORS[t] }} />
+                    {TIER_LABEL[t]}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="chart-wrapper">
-        {loading ? (
-          <div className="chart-state-box">Loading trend data...</div>
-        ) : !data || data.length === 0 ? (
-          <div className="chart-state-box">No practice activity logged for this time range yet.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={270}>
-            <LineChart data={data} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                tickFormatter={(v) => formatChartDate(v, bucket)}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                yAxisId="left"
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                axisLine={false}
-                tickLine={false}
-                allowDecimals={false}
-              />
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                domain={[0, 100]}
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                tickFormatter={(v) => `${v}%`}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip content={<CustomTooltip bucket={bucket} />} />
-              <Legend
-                wrapperStyle={{ paddingTop: '14px', fontSize: '12px' }}
-                iconType="circle"
-              />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="solved"
-                name="Solved Grids"
-                stroke="#111827"
-                strokeWidth={2.5}
-                dot={{ r: 3.5, fill: '#111827' }}
-                activeDot={{ r: 6 }}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="accuracy"
-                name="Accuracy"
-                stroke="#2563eb"
-                strokeWidth={2.5}
-                dot={{ r: 3.5, fill: '#2563eb' }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+      {/* Speed vs Target card */}
+      <div className="stats-card speed-target-card">
+        <div className="card-header-simple">
+          <h3>Speed vs. Target Time</h3>
+          <p className="chart-card-sub" style={{ marginBottom: '20px' }}>Your average solve time per tier compared to the passing threshold</p>
+        </div>
+        <div className="speed-tier-list">
+          {tierSpeedData.map(({ tier, avgSec, target, bestSec, underTarget }) => {
+            const barPct = avgSec == null ? 0 : Math.min(100, (avgSec / (target * 1.5)) * 100);
+            const targetPct = Math.min(100, (target / (target * 1.5)) * 100);
+            return (
+              <div key={tier} className="speed-tier-row">
+                <div className="speed-tier-head">
+                  <span className={`tier-tag tier-${tier}`}>{tier.charAt(0).toUpperCase() + tier.slice(1)}</span>
+                  <div className="speed-tier-values">
+                    {avgSec != null ? (
+                      <>
+                        <span className={`speed-val ${underTarget ? 'under-target' : 'over-target'}`}>
+                          {avgSec}s avg
+                        </span>
+                        <span className="speed-badge">
+                          {underTarget
+                            ? `✓ ${(target - avgSec).toFixed(1)}s under target`
+                            : `${(avgSec - target).toFixed(1)}s over ${target}s target`}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="speed-no-data">No data yet</span>
+                    )}
+                    {bestSec != null && <span className="speed-best">Best clean: {bestSec}s</span>}
+                  </div>
+                </div>
+                <div className="speed-bar-track">
+                  {/* Actual avg time bar */}
+                  {avgSec != null && (
+                    <div
+                      className={`speed-bar-fill ${underTarget ? 'fill-good' : 'fill-bad'}`}
+                      style={{ width: `${barPct}%` }}
+                    />
+                  )}
+                  {/* Target marker */}
+                  <div className="speed-target-marker" style={{ left: `${targetPct}%` }} />
+                </div>
+                <div className="speed-track-labels">
+                  <span>0s</span>
+                  <span style={{ marginLeft: `${targetPct}%` }} className="target-label-text">Target: {target}s</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -254,8 +485,8 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
         </div>
       </div>
 
-      {/* Main Line Chart Section */}
-      <PerformanceChart />
+      {/* Main Chart Section */}
+      <PerformanceChart byTier={byTier} pbs={pbs} />
 
       {/* Bottom Grid: Tier Breakdown + Recent History */}
       <div className="stats-bottom-grid">
