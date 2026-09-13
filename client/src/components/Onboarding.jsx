@@ -7,12 +7,12 @@ const STEPS = [
     body: 'Each puzzle has one blank cell marked with a "?". Your job is to find the correct letter for that cell using only the rows and columns of the grid.',
   },
   {
-    icon: 'a�?',
+    icon: 'αβγ',
     title: 'Greek Column Labels',
-    body: 'The columns are labelled a, �, ?, d, e (alpha through epsilon). Each letter A�E appears exactly once in every row and every column � just like a Sudoku, but simpler.',
+    body: 'The columns are labelled α, β, γ, δ, ε (alpha through epsilon). Each letter A–E appears exactly once in every row and every column — just like a Sudoku, but simpler.',
   },
   {
-    icon: '?',
+    icon: '★',
     title: 'Difficulty Tiers',
     body: 'Low: the answer is readable directly from the target row and column.\nMedium: one helper cell must be solved first.\nHigh: a chain of two or three deductions is required.',
   },
@@ -44,7 +44,7 @@ export default function Onboarding({ onDismiss }) {
           ))}
         </div>
         <button className="onboarding-btn" onClick={next}>
-          {isLast ? 'Got it � start playing' : 'Next'}
+          {isLast ? 'Got it — start playing' : 'Next'}
         </button>
         <button className="onboarding-skip" onClick={() => { localStorage.setItem('dmat_onboarded', '1'); onDismiss(); }}>
           Skip intro

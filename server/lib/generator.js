@@ -8,14 +8,24 @@ const TIER_ROUNDS = {
   high: [2, 3],
 };
 
-/**
- * Manhattan distance from the first pivot cell in path to the target.
- * A path with no pivots (direct read) returns 0.
- */
 function computePivotDistance(path, target) {
   if (!path || path.length === 0 || path[0].length === 0) return 0;
   const [pr, pc] = path[0][0];
   return Math.abs(pr - target.row) + Math.abs(pc - target.col);
+}
+
+// NEW: classify the puzzle by *structure*, not just depth, so stats can
+// answer "what type of Latin Square am I bad at."
+function computePatternTag(path, rounds, target) {
+  if (rounds === 0 || !path || path.length === 0 || path[0].length === 0) {
+    return 'direct';
+  }
+  if (rounds === 1) {
+    const [pr, pc] = path[0][0];
+    const aligned = pr === target.row || pc === target.col;
+    return aligned ? 'single-pivot-aligned' : 'single-pivot-cross';
+  }
+  return rounds >= 3 ? 'chain-3' : 'chain-2';
 }
 
 function shuffle(arr) {
@@ -59,17 +69,6 @@ function getCandidates(r, c, grid, known) {
   return cand;
 }
 
-/**
- * Simulates the "no notes, rows+columns only" deduction the dMAT format
- * requires. At each round it resolves every currently-forced cell
- * simultaneously (mirrors the Four-Sightings / global elimination style
- * of reasoning) and reports which round the target cell collapses to a
- * single candidate in.
- *   rounds === 0  -> direct read (target forced by its own row+col)
- *   rounds === 1  -> one pivot cell needed
- *   rounds === 2/3 -> chained deduction
- *   rounds === -1 -> not solvable by simple row/col elimination alone
- */
 function computeRounds(grid, mask, tr, tc) {
   const known = mask.map((row) => row.slice());
   const path = [];
@@ -97,11 +96,12 @@ function computeRounds(grid, mask, tr, tc) {
   }
 }
 
-function generatePuzzle(difficulty) {
-  const desired = TIER_ROUNDS[difficulty];
-  if (!desired) throw new Error('Unknown difficulty: ' + difficulty);
-
-  for (let attempt = 0; attempt < 400; attempt++) {
+/**
+ * Core single-attempt generator. Returns null if it can't hit `desiredRounds`
+ * within the attempt budget — caller decides whether to fall back.
+ */
+function attemptGenerate(desiredRounds, maxAttempts = 400) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const grid = randomLatinSquare();
     const tr = Math.floor(Math.random() * N);
     const tc = Math.floor(Math.random() * N);
@@ -121,7 +121,7 @@ function generatePuzzle(difficulty) {
     }
     candidates = shuffle(candidates);
 
-    let reached = desired.includes(cur.rounds);
+    let reached = desiredRounds.includes(cur.rounds);
     let extraTries = 0;
 
     for (const [r, c] of candidates) {
@@ -132,26 +132,45 @@ function generatePuzzle(difficulty) {
       const test = computeRounds(grid, mask, tr, tc);
       const ok =
         test.rounds !== -1 &&
-        (reached ? desired.includes(test.rounds) : test.rounds <= Math.max(...desired));
+        (reached ? desiredRounds.includes(test.rounds) : test.rounds <= Math.max(...desiredRounds));
 
       if (ok) {
         cur = test;
-        if (desired.includes(cur.rounds)) {
+        if (desiredRounds.includes(cur.rounds)) {
           if (reached) extraTries++;
           reached = true;
         }
       } else {
-        mask[r][c] = true; // revert
+        mask[r][c] = true;
       }
     }
 
     if (reached) {
-      const pivotDistance = computePivotDistance(cur.path, { row: tr, col: tc });
-      return { grid, mask, target: { row: tr, col: tc }, path: cur.path, rounds: cur.rounds, pivotDistance };
+      const target = { row: tr, col: tc };
+      const pivotDistance = computePivotDistance(cur.path, target);
+      const patternTag = computePatternTag(cur.path, cur.rounds, target);
+      return { grid, mask, target, path: cur.path, rounds: cur.rounds, pivotDistance, patternTag };
     }
   }
+  return null;
+}
 
-  // Fallback: fully revealed grid, always a direct read.
+/**
+ * Public entry point for a plain difficulty-tier request.
+ * FIX: previously, a silent fallback could return a puzzle whose actual
+ * `rounds` didn't match the requested tier, while the caller stored the
+ * *requested* difficulty label anyway. Now the fallback is explicitly
+ * flagged so the caller can decide what to do (currently: still serve it,
+ * but mark difficultyMismatch=true rather than lying about it in stats).
+ */
+function generatePuzzle(difficulty) {
+  const desired = TIER_ROUNDS[difficulty];
+  if (!desired) throw new Error('Unknown difficulty: ' + difficulty);
+
+  const result = attemptGenerate(desired, 400);
+  if (result) return { ...result, difficultyMismatch: false };
+
+  // Fallback: fully revealed grid, always a direct read (rounds === 0).
   const grid = randomLatinSquare();
   const target = { row: 2, col: 2 };
   const mask = [];
@@ -159,7 +178,46 @@ function generatePuzzle(difficulty) {
   mask[target.row][target.col] = false;
   const cur = computeRounds(grid, mask, target.row, target.col);
   const pivotDistance = computePivotDistance(cur.path, target);
-  return { grid, mask, target, path: cur.path, rounds: cur.rounds, pivotDistance };
+  const patternTag = computePatternTag(cur.path, cur.rounds, target);
+  const mismatch = !desired.includes(cur.rounds);
+
+  return {
+    grid, mask, target, path: cur.path, rounds: cur.rounds,
+    pivotDistance, patternTag, difficultyMismatch: mismatch,
+  };
 }
 
-module.exports = { N, LETTERS, COLS, TIER_ROUNDS, generatePuzzle, computeRounds, computePivotDistance };
+/**
+ * NEW: the function the weakness-targeting feature actually needed.
+ * Loops across difficulty tiers (not just one) to find a puzzle matching
+ * a specific rounds/pivotDistance profile — used by Weakness Mode and by
+ * Review Mode's "practice a similar one" retry.
+ */
+function generateTargetedPuzzle(targetRounds, targetPivotDistance, fallbackDifficulty = 'medium') {
+  let tier = fallbackDifficulty;
+  for (const [t, rs] of Object.entries(TIER_ROUNDS)) {
+    if (targetRounds != null && rs.includes(targetRounds)) tier = t;
+  }
+  const desired = targetRounds != null ? [targetRounds] : TIER_ROUNDS[tier];
+
+  let best = null;
+  for (let i = 0; i < 200; i++) {
+    const result = attemptGenerate(desired, 40);
+    if (!result) continue;
+    if (targetPivotDistance == null) return { ...result, difficulty: tier, difficultyMismatch: false };
+    if (Math.abs(result.pivotDistance - targetPivotDistance) <= 1) {
+      return { ...result, difficulty: tier, difficultyMismatch: false };
+    }
+    if (!best) best = result; // keep a fallback candidate matching rounds at least
+  }
+  if (best) return { ...best, difficulty: tier, difficultyMismatch: false };
+
+  const fallback = generatePuzzle(tier);
+  return { ...fallback, difficulty: tier };
+}
+
+module.exports = {
+  N, LETTERS, COLS, TIER_ROUNDS,
+  generatePuzzle, generateTargetedPuzzle,
+  computeRounds, computePivotDistance, computePatternTag,
+};

@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
@@ -8,7 +8,6 @@ import { timeStr, relTime } from '../lib/format';
 
 const TIERS = ['low', 'medium', 'high'];
 const TIER_LABEL = { low: 'Low', medium: 'Med', high: 'High' };
-const TIER_TARGET_MS = { low: 20000, medium: 50000, high: 75000 };
 
 function TimeseriesChart() {
   const [data, setData] = useState(null);
@@ -36,7 +35,7 @@ function TimeseriesChart() {
     <div className="timeseries-section">
       <button className="stats-section-title timeseries-toggle" onClick={toggle}
         style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, width: '100%' }}>
-        Progress over time {open ? String.fromCharCode(9650) : String.fromCharCode(9660)}
+        Progress over time {open ? '\u25b2' : '\u25bc'}
       </button>
       {open && (
         <>
@@ -82,19 +81,42 @@ function TimeseriesChart() {
   );
 }
 
+// FIX: was computed off global accuracy only. Now flags a specific tier.
 function AdaptiveBanner({ stats }) {
-  if (!stats || !stats.overall || stats.overall.solved < 5) return null;
-  const { accuracy, avgTimeMs } = stats.overall;
-  if (accuracy >= 90) {
-    return <div className="adaptive-banner good">Great accuracy! Consider trying a harder difficulty.</div>;
-  }
-  if (accuracy != null && accuracy < 60) {
-    return <div className="adaptive-banner warn">Accuracy below 60% - try a lower difficulty to build confidence.</div>;
+  if (!stats || !stats.byTier) return null;
+  for (const t of TIERS) {
+    const d = stats.byTier[t];
+    if (!d || d.solved < 5) continue;
+    if (d.accuracy >= 90) {
+      return <div className="adaptive-banner good">Strong on {TIER_LABEL[t]} ({d.accuracy}%) — try the next difficulty up.</div>;
+    }
+    if (d.accuracy != null && d.accuracy < 60) {
+      return <div className="adaptive-banner warn">{TIER_LABEL[t]} accuracy is {d.accuracy}% — worth reinforcing before moving up.</div>;
+    }
   }
   return null;
 }
 
-export default function Stats({ stats, history, isGuest, guestAttempts, onSignUpNudge }) {
+function WeaknessCard({ onPractice }) {
+  const [weakest, setWeakest] = useState(undefined); // undefined = loading
+
+  useEffect(() => {
+    api.getWeakest().then((d) => setWeakest(d.weakest)).catch(() => setWeakest(null));
+  }, []);
+
+  if (weakest === undefined || !weakest) return null;
+
+  return (
+    <div className="adaptive-banner warn" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+      <span>
+        Weakest spot: {weakest.difficulty} / {weakest.patternTag.replace(/-/g, ' ')} — {weakest.accuracy}% over last {weakest.sampleSize}
+      </span>
+      <button className="btn-link" onClick={() => onPractice(weakest)}>Practice this →</button>
+    </div>
+  );
+}
+
+export default function Stats({ stats, history, isGuest, guestAttempts, onSignUpNudge, onPracticeWeakness }) {
   const overall = stats && stats.overall;
   const byTier  = (stats && stats.byTier) || {};
   const streaks  = stats && stats.streaks;
@@ -126,10 +148,11 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
   return (
     <div className="stats-panel">
       <AdaptiveBanner stats={stats} />
+      {onPracticeWeakness && <WeaknessCard onPractice={onPracticeWeakness} />}
 
       {streaks && (streaks.current > 0 || streaks.best > 0) && (
         <div className="streaks-row">
-          <span className="streak-chip">{'🔥'} {streaks.current} day streak</span>
+          <span className="streak-chip">{'🔥'} {streaks.current} day practice streak</span>
           {streaks.best > streaks.current && (
             <span className="streak-best">Best: {streaks.best}</span>
           )}
@@ -150,6 +173,18 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
           <div className="label">avg time</div>
         </div>
       </div>
+
+      {overall && overall.solved > 0 && (
+        <div className="stats-tier-section">
+          <div className="stats-section-title">Timing detail</div>
+          <div className="pbs-row">
+            <div className="pb-chip"><span>Median</span><span className="pb-time">{timeStr(overall.medianTimeMs)}</span></div>
+            <div className="pb-chip"><span>Fastest</span><span className="pb-time">{timeStr(overall.fastestMs)}</span></div>
+            <div className="pb-chip"><span>Slowest</span><span className="pb-time">{timeStr(overall.slowestMs)}</span></div>
+            <div className="pb-chip"><span>Total practice</span><span className="pb-time">{Math.round((overall.totalPracticeMs || 0) / 60000)}m</span></div>
+          </div>
+        </div>
+      )}
 
       {Object.keys(pbs).length > 0 && (
         <div className="stats-tier-section">
@@ -200,9 +235,9 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
             {history.map((a, i) => (
               <div key={i} className={'history-row' + (a.correct ? ' correct' : ' wrong')}>
                 <span className={'tier-badge tier-badge-' + a.difficulty}>{TIER_LABEL[a.difficulty]}</span>
-                <span className="history-result">{a.correct ? '✓' : '✗'}</span>
+                <span className="history-result">{a.correct ? '\u2713' : '\u2717'}</span>
                 <span className="history-time">{timeStr(a.elapsedMs)}</span>
-                {a.hintUsed && <span className="history-hint" title="Hint used">⚑</span>}
+                {a.hintUsed && <span className="history-hint" title="Hint used">\u2691</span>}
                 <span className="history-ago">{relTime(a.createdAt)}</span>
               </div>
             ))}

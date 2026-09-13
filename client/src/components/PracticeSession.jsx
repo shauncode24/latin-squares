@@ -9,7 +9,7 @@ const TIERS = ['low', 'medium', 'high'];
 const TIER_TARGET_MS = { low: 20000, medium: 50000, high: 75000 };
 
 export default function PracticeSession({ config, onExit }) {
-  const { activeSession, startSession, recordAttempt, endSession } = useSession();
+  const { startSession, recordAttempt, endSession } = useSession();
   const [sessionId, setSessionId] = useState(null);
   const [questionNum, setQuestionNum] = useState(0);
   const [puzzle, setPuzzle] = useState(null);
@@ -78,16 +78,23 @@ export default function PracticeSession({ config, onExit }) {
     setAnswered(true);
     recordAttempt({ correct: res.correct, hintUsed, elapsedMs, solveQuality: res.solveQuality });
 
+    // NEW: automatically surface the deduction chain on a wrong or
+    // slow answer, even in practice mode without a hint request —
+    // this is the actual teaching moment, not just "here's the letter."
+    if (!isExam && !res.correct) {
+      setPivotCells(res.pivotCells || []);
+    }
+
     if (!isExam) {
       const target = TIER_TARGET_MS[puzzle.difficulty] / 1000;
       const timeSec = (elapsedMs / 1000).toFixed(1);
       if (res.correct) {
         const overUnder = elapsedMs <= TIER_TARGET_MS[puzzle.difficulty]
-          ? `? ${timeSec}s (target ${target}s)`
+          ? `${timeSec}s (target ${target}s)`
           : `${timeSec}s (${((elapsedMs - TIER_TARGET_MS[puzzle.difficulty]) / 1000).toFixed(1)}s over target)`;
-        setFeedback('Correct � ' + overUnder);
+        setFeedback('Correct — ' + overUnder);
       } else {
-        setFeedback(`Wrong � answer was ${res.correctLetter}`);
+        setFeedback(`Wrong — answer was ${res.correctLetter}. Highlighted cell shows how to find it.`);
       }
     }
   }
@@ -120,7 +127,7 @@ export default function PracticeSession({ config, onExit }) {
           <div className="stat"><div className="num">{summary.correct}/{summary.attempted}</div><div className="label">correct</div></div>
           <div className="stat"><div className="num">{acc}%</div><div className="label">accuracy</div></div>
           <div className="stat"><div className="num">{timeStr(summary.avgTimeMs)}</div><div className="label">avg time</div></div>
-          <div className="stat"><div className="num">{summary.streak}</div><div className="label">best streak</div></div>
+          <div className="stat"><div className="num">{summary.streak}</div><div className="label">best run this session</div></div>
         </div>
         {summary.hinted > 0 && <p className="summary-note">{summary.hinted} hint{summary.hinted > 1 ? 's' : ''} used</p>}
         <button className="btn primary" onClick={onExit}>Back to practice</button>
@@ -137,7 +144,7 @@ export default function PracticeSession({ config, onExit }) {
         <div className="session-progress-bar">
           <div className="session-progress-fill" style={{ width: `${(questionNum / questionCount) * 100}%` }} />
         </div>
-        <button className="btn-link" onClick={onExit}>? Exit</button>
+        <button className="btn-link" onClick={onExit}>← Exit</button>
       </div>
 
       {puzzle && !loading ? (
@@ -151,7 +158,7 @@ export default function PracticeSession({ config, onExit }) {
           allLetters={puzzle.allLetters}
         />
       ) : (
-        <div className="loading">Loading�</div>
+        <div className="loading">Loading…</div>
       )}
 
       <AnswerPad onSelect={handleSelect} disabled={answered || loading || !puzzle} selected={selected} correctLetter={correctLetter} />
@@ -164,7 +171,7 @@ export default function PracticeSession({ config, onExit }) {
         )}
         {answered ? (
           <button className="btn primary" onClick={next}>
-            {questionNum + 1 >= questionCount ? 'Finish' : 'Next ?'}
+            {questionNum + 1 >= questionCount ? 'Finish' : 'Next →'}
           </button>
         ) : (
           <span className={`time${elapsed / 1000 > (TIER_TARGET_MS[puzzle?.difficulty || 'low'] / 1000) ? ' over' : ''}`}>

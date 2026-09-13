@@ -94,6 +94,7 @@ function Game() {
   const [stats, setStats]     = useState(null);
   const [history, setHistory] = useState(null);
   const [guestAttempts, setGuestAttempts] = useState([]);
+  const [weaknessConfig, setWeaknessConfig] = useState(null);
 
   const answered = correctLetter !== null;
 
@@ -146,6 +147,45 @@ function Game() {
       setLoading(false);
     }
   }
+
+  function startWeaknessPractice(weakest) {
+    setWeaknessConfig({
+      rounds: weakest.rounds,
+      pivotDistance: weakest.pivotDistance,
+      difficulty: weakest.difficulty,
+    });
+  }
+
+  async function newWeaknessPuzzle() {
+    setLoading(true);
+    setError('');
+    setSelected(null);
+    setCorrectLetter(null);
+    answeredRef.current = false;
+    hintUsedRef.current = false;
+    setFeedback('');
+    setPivotCells([]);
+    clearInterval(tickRef.current);
+    try {
+      const data = await api.generateSimilar(weaknessConfig.rounds, weaknessConfig.pivotDistance, weaknessConfig.difficulty);
+      setPuzzle(data);
+      setTier(data.difficulty);
+      startRef.current = performance.now();
+      setElapsed(0);
+      tickRef.current = setInterval(() => {
+        if (answeredRef.current) { clearInterval(tickRef.current); return; }
+        setElapsed(performance.now() - startRef.current);
+      }, 100);
+    } catch (err) {
+      setError(err.message || 'Could not reach the server.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (weaknessConfig) newWeaknessPuzzle();
+  }, [weaknessConfig]);
 
   useEffect(() => {
     newPuzzle(tier);
@@ -252,6 +292,7 @@ function Game() {
           isGuest={isGuest}
           guestAttempts={guestAttempts}
           onSignUpNudge={() => setShowAuth(true)}
+          onPracticeWeakness={startWeaknessPractice}
         />
 
         <header className="masthead">
@@ -290,6 +331,13 @@ function Game() {
 
         {error && <div className="error">{error}</div>}
 
+        {weaknessConfig && (
+          <div className="guest-banner">
+            🎯 Weakness Mode — {weaknessConfig.difficulty} / rounds {weaknessConfig.rounds}
+            {' '}<button className="btn-link" onClick={() => { setWeaknessConfig(null); newPuzzle(tier); }}>Exit</button>
+          </div>
+        )}
+
         {isGuest && !showAuth && (
           <div className="guest-banner">
             \ud83c\udfae Guest mode \u2014 <button className="btn-link" onClick={() => setShowAuth(true)}>Sign in</button> to save your scores
@@ -327,7 +375,13 @@ function Game() {
           <button className="btn" onClick={showHint} disabled={!puzzle || loading}>Hint</button>
           <button className="btn" onClick={reveal} disabled={answered || !puzzle || loading}>Reveal</button>
           <button className="btn" onClick={() => setShowReview(true)} disabled={loading || isGuest} title={isGuest ? 'Sign in to review missed puzzles' : ''}>Review</button>
-          <button className="btn primary" onClick={() => newPuzzle(tier)} disabled={loading}>New Grid</button>
+          <button
+            className="btn primary"
+            onClick={() => weaknessConfig ? newWeaknessPuzzle() : newPuzzle(tier)}
+            disabled={loading}
+          >
+            New Grid
+          </button>
         </div>
 
         {user && (

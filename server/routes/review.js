@@ -1,27 +1,44 @@
 const express = require('express');
 const router = express.Router();
-const { getUserId } = require('../middleware/auth');
+const { attachUser } = require('../middleware/auth');
 const Attempt = require('../models/Attempt');
 
-// GET /api/review/missed � last 20 incorrect or hinted attempts with puzzle snapshots
+router.use(attachUser);
+
+// GET /api/review/missed — wrong, hinted, revealed, or rushed attempts
 router.get('/missed', async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId) return res.status(401).json({ error: 'not authenticated' });
-
+    if (!req.userId) return res.json({ missed: [] });
     const missed = await Attempt.find({
-      userId,
-      $or: [{ correct: false }, { solveQuality: 'hinted' }, { solveQuality: 'revealed' }],
+      userId: req.userId,
+      $or: [
+        { correct: false },
+        { solveQuality: { $in: ['hinted', 'revealed', 'rushed'] } },
+      ],
     })
       .sort({ createdAt: -1 })
-      .limit(20)
-      .select('difficulty rounds pivotDistance correct solveQuality elapsedMs puzzleSnapshot createdAt -_id')
+      .limit(50)
       .lean();
 
-    res.json({ missed });
+    res.json({
+      missed: missed.map((a) => ({
+        _id: a._id,
+        difficulty: a.difficulty,
+        rounds: a.rounds,
+        pivotDistance: a.pivotDistance,
+        patternTag: a.patternTag,
+        correct: a.correct,
+        selectedLetter: a.selectedLetter,
+        correctLetter: a.correctLetter,
+        solveQuality: a.solveQuality,
+        elapsedMs: a.elapsedMs,
+        createdAt: a.createdAt,
+        puzzleSnapshot: a.puzzleSnapshot, // full grid — Review can now actually render it
+      })),
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'failed to fetch missed attempts' });
+    res.status(500).json({ error: 'failed to load missed puzzles' });
   }
 });
 
