@@ -1,6 +1,6 @@
 const ROW_LABELS = ['1', '2', '3', '4', '5'];
 
-export default function Grid({ cols, cells, target, pivotCells, revealedLetter }) {
+export default function Grid({ cols, cells, target, pivotCells = [], revealedLetter, answered = false, allLetters = null }) {
   const isPivot = (r, c) => pivotCells.some(([pr, pc]) => pr === r && pc === c);
 
   return (
@@ -21,11 +21,16 @@ export default function Grid({ cols, cells, target, pivotCells, revealedLetter }
               const isTarget = r === target.row && c === target.col;
               const classNames = ['cell'];
               if (isTarget) classNames.push('target');
+              else if (answered && letter === null) classNames.push('revealed');
               else if (letter === null) classNames.push('blank');
               if (isPivot(r, c)) classNames.push('pivot');
 
               let content = letter;
-              if (isTarget) content = revealedLetter || '?';
+              if (isTarget) {
+                content = revealedLetter || '?';
+              } else if (answered && letter === null && allLetters) {
+                content = allLetters[r][c];
+              }
 
               return (
                 <td key={c} className={classNames.join(' ')}>

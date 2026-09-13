@@ -3,82 +3,55 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 async function request(method, path, body) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
-    credentials: 'include',           // send/receive httpOnly cookies
+    credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
-
   if (!res.ok) {
     let message = `Request failed: ${res.status}`;
     try {
       const data = await res.json();
       message = data.error || data.message || message;
-    } catch {
-      // non-JSON error body — keep the default message
-    }
+    } catch { /* non-JSON error */ }
     throw new Error(message);
   }
-
-  // 204 No Content has no body
   if (res.status === 204) return null;
   return res.json();
 }
 
 export const api = {
-  // ── Auth ────────────────────────────────────────────────────────────────
-  /** Returns { username } */
-  me: () => request('GET', '/api/auth/me'),
-
-  /** Returns { username } */
-  login: (username, password) =>
-    request('POST', '/api/auth/login', { username, password }),
-
-  /** Returns { username } */
-  signup: (username, password) =>
-    request('POST', '/api/auth/signup', { username, password }),
-
-  /** Clears the session cookie */
+  // Auth
+  me:     () => request('GET',  '/api/auth/me'),
+  login:  (username, password) => request('POST', '/api/auth/login',  { username, password }),
+  signup: (username, password) => request('POST', '/api/auth/signup', { username, password }),
   logout: () => request('POST', '/api/auth/logout'),
 
-  // ── Puzzles ─────────────────────────────────────────────────────────────
-  /**
-   * Generate a new puzzle for the given tier ('low' | 'medium' | 'high').
-   * Returns { puzzleId, cols, cells, target }
-   */
-  generatePuzzle: (tier) =>
-    request('POST', '/api/puzzles/generate', { difficulty: tier }),
-
-  /**
-   * Submit the player's answer letter for a puzzle.
-   * Returns { correct: boolean, correctLetter: string }
-   */
-  submitAnswer: (puzzleId, letter, elapsedMs) =>
-    request('POST', `/api/puzzles/${puzzleId}/answer`, { letter, elapsedMs }),
-
-  /**
-   * Reveal the correct answer without scoring.
-   * Returns { correctLetter: string }
-   */
+  // Puzzles
+  generatePuzzle: (difficulty, opts = {}) =>
+    request('POST', '/api/puzzles/generate', { difficulty, ...opts }),
+  submitAnswer: (puzzleId, letter, elapsedMs, hintUsed = false, sessionId = null) =>
+    request('POST', `/api/puzzles/${puzzleId}/answer`, { letter, elapsedMs, hintUsed, sessionId }),
   revealAnswer: (puzzleId) =>
-    request('GET', `/api/puzzles/${puzzleId}/reveal`),
-
-  /**
-   * Get a hint for the current puzzle.
-   * Returns { pivotCells: Array<{row, col}>, direct: boolean }
-   */
+    request('GET',  `/api/puzzles/${puzzleId}/reveal`),
   getHint: (puzzleId) =>
-    request('GET', `/api/puzzles/${puzzleId}/hint`),
+    request('GET',  `/api/puzzles/${puzzleId}/hint`),
 
-  // ── Stats ────────────────────────────────────────────────────────────────
-  /**
-   * Get aggregate stats for the logged-in user.
-   * Returns { totalSolved, accuracy, avgTime, ... }
-   */
-  getStats: () => request('GET', '/api/stats'),
+  // Stats
+  getStats:      () => request('GET', '/api/stats'),
+  getHistory:    () => request('GET', '/api/stats/history'),
+  getTimeseries: (bucket = 'daily') => request('GET', `/api/stats/timeseries?bucket=${bucket}`),
 
-  /**
-   * Get recent puzzle history for the logged-in user.
-   * Returns { history: Array<{ puzzleId, correct, elapsedMs, tier, ... }> }
-   */
-  getHistory: () => request('GET', '/api/stats/history'),
+  // Sessions
+  createSession:   (mode, difficulty, questionCount) =>
+    request('POST',  '/api/sessions', { mode, difficulty, questionCount }),
+  getSession:      (sessionId) => request('GET',   `/api/sessions/${sessionId}`),
+  completeSession: (sessionId) => request('PATCH', `/api/sessions/${sessionId}/complete`),
+
+  // Review
+  getMissed: () => request('GET', '/api/review/missed'),
+
+  // Spaced repetition
+  getDueItems:  () => request('GET',  '/api/sr/due'),
+  submitReview: (difficulty, rounds, pivotDistance, correct, hintUsed) =>
+    request('POST', '/api/sr/review', { difficulty, rounds, pivotDistance, correct, hintUsed }),
 };

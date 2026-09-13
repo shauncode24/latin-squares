@@ -4,9 +4,12 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 
-const authRoutes = require('./routes/auth');
-const puzzleRoutes = require('./routes/puzzles');
-const statsRoutes = require('./routes/stats');
+const authRoutes    = require('./routes/auth');
+const puzzleRoutes  = require('./routes/puzzles');
+const statsRoutes   = require('./routes/stats');
+const sessionRoutes = require('./routes/sessions');
+const reviewRoutes  = require('./routes/review');
+const srRoutes      = require('./routes/spaced-repetition');
 
 const app = express();
 app.use(cors({
@@ -17,9 +20,12 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
-app.use('/api/auth', authRoutes);
-app.use('/api/puzzles', puzzleRoutes);
-app.use('/api/stats', statsRoutes);
+app.use('/api/auth',     authRoutes);
+app.use('/api/puzzles',  puzzleRoutes);
+app.use('/api/stats',    statsRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/review',   reviewRoutes);
+app.use('/api/sr',       srRoutes);
 
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/dmat';

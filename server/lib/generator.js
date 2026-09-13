@@ -8,6 +8,16 @@ const TIER_ROUNDS = {
   high: [2, 3],
 };
 
+/**
+ * Manhattan distance from the first pivot cell in path to the target.
+ * A path with no pivots (direct read) returns 0.
+ */
+function computePivotDistance(path, target) {
+  if (!path || path.length === 0 || path[0].length === 0) return 0;
+  const [pr, pc] = path[0][0];
+  return Math.abs(pr - target.row) + Math.abs(pc - target.col);
+}
+
 function shuffle(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -136,7 +146,8 @@ function generatePuzzle(difficulty) {
     }
 
     if (reached) {
-      return { grid, mask, target: { row: tr, col: tc }, path: cur.path, rounds: cur.rounds };
+      const pivotDistance = computePivotDistance(cur.path, { row: tr, col: tc });
+      return { grid, mask, target: { row: tr, col: tc }, path: cur.path, rounds: cur.rounds, pivotDistance };
     }
   }
 
@@ -147,7 +158,8 @@ function generatePuzzle(difficulty) {
   for (let r = 0; r < N; r++) mask.push(new Array(N).fill(true));
   mask[target.row][target.col] = false;
   const cur = computeRounds(grid, mask, target.row, target.col);
-  return { grid, mask, target, path: cur.path, rounds: cur.rounds };
+  const pivotDistance = computePivotDistance(cur.path, target);
+  return { grid, mask, target, path: cur.path, rounds: cur.rounds, pivotDistance };
 }
 
-module.exports = { N, LETTERS, COLS, TIER_ROUNDS, generatePuzzle, computeRounds };
+module.exports = { N, LETTERS, COLS, TIER_ROUNDS, generatePuzzle, computeRounds, computePivotDistance };

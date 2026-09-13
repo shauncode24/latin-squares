@@ -481,3 +481,268 @@
   color: var(--ink-soft);
   opacity: 0.7;
 }
+
+/* --- Answered grid state ---------------------------------- */
+.board.answered { background: #f7f8f4; }
+.grid td.revealed {
+  background: #f0f1ec;
+  color: var(--ink-soft);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* --- Streaks & personal bests ----------------------------- */
+.streaks-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.streak-chip {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e67e22;
+}
+.streak-best {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.pbs-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.pb-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.pb-time { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+
+/* --- History hint indicator ------------------------------- */
+.history-hint { color: var(--ink-soft); font-size: 11px; }
+
+/* --- Adaptive banner -------------------------------------- */
+.adaptive-banner {
+  font-size: 12px;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid;
+}
+.adaptive-banner.good { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.adaptive-banner.warn { background: var(--wrong-soft); border-color: var(--wrong); color: var(--wrong); }
+
+/* --- Onboarding overlay ----------------------------------- */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28,32,29,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+.onboarding-card {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 36px 28px 28px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+}
+.onboarding-icon {
+  font-size: 32px;
+  margin-bottom: 14px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+.onboarding-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+.onboarding-body {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  margin: 0 0 20px;
+  white-space: pre-line;
+}
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.onboarding-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+  transition: background 0.2s;
+}
+.onboarding-dot.active { background: var(--accent); }
+.onboarding-btn {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+  padding: 11px 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.onboarding-skip {
+  font-family: var(--sans);
+  font-size: 12px;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* --- Session / Practice ----------------------------------- */
+.session-wrap { padding: 0; }
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.session-progress-label { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+.session-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.session-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.session-summary {
+  text-align: center;
+  padding: 32px 0 16px;
+}
+.session-summary h2 { font-size: 18px; margin: 0 0 20px; }
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.summary-note { font-size: 12px; color: var(--ink-soft); margin-bottom: 16px; }
+
+/* --- Session setup modal ---------------------------------- */
+.session-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28,32,29,0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+  padding: 16px;
+}
+.session-modal {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+}
+.session-modal h3 { margin: 0 0 16px; font-size: 16px; }
+.session-option-group { margin-bottom: 16px; }
+.session-option-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-bottom: 8px; }
+.session-option-row { display: flex; gap: 6px; }
+.session-option-btn {
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 9px 4px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-soft);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.session-option-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.session-modal-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* --- Review mode ------------------------------------------ */
+.review-wrap { padding: 0; }
+.review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.review-header h2 { margin: 0; font-size: 16px; }
+.review-list { display: flex; flex-direction: column; gap: 10px; }
+.review-item {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.review-item.correct { border-left: 3px solid var(--accent); }
+.review-item.wrong   { border-left: 3px solid var(--wrong); }
+.review-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.review-quality { color: var(--ink-soft); }
+.review-time { font-family: var(--mono); }
+.review-ago  { color: var(--ink-soft); margin-left: auto; }
+.review-info { color: var(--ink-soft); margin-bottom: 4px; }
+.review-path { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.review-empty { text-align: center; padding: 32px 0; }
+
+/* --- Guest session counter -------------------------------- */
+.stats-guest-session {
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+
+/* --- Responsive: narrow viewports ------------------------ */
+@media (max-width: 400px) {
+  .grid th, .grid td { width: 36px; height: 36px; font-size: 14px; }
+  .wrap { padding: 16px 10px 40px; }
+  .summary-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* --- Dark mode -------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #13161a;
+    --panel: #1e2226;
+    --ink:   #e8ebe4;
+    --ink-soft: #8a9190;
+    --line:  #2e3338;
+    --accent: #3db88a;
+    --accent-soft: #1a3028;
+    --wrong: #e05c48;
+    --wrong-soft: #3a1a15;
+  }
+  .grid td.cell    { background: #252a2e; }
+  .grid td.blank   { background: #1b1f22; }
+  .grid td.revealed { background: #1a1d20; }
+  .auth-card, .onboarding-card, .session-modal { background: var(--panel); }
+}
+
+/* --- Reduced motion --------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
