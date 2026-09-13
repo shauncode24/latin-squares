@@ -1,14 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
+const { getUserId } = require('../middleware/auth');
 const Attempt = require('../models/Attempt');
 
+// GET /api/stats — aggregated summary + per-tier breakdown
 router.get('/', async (req, res) => {
   try {
-    const clientId = req.query.clientId || req.header('x-client-id');
-    if (!clientId) return res.status(400).json({ error: 'clientId required' });
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'not authenticated' });
+
+    const objectId = new mongoose.Types.ObjectId(userId);
 
     const rows = await Attempt.aggregate([
-      { $match: { clientId } },
+      { $match: { userId: objectId } },
       {
         $group: {
           _id: '$difficulty',
@@ -28,6 +33,7 @@ router.get('/', async (req, res) => {
       byTier[r._id] = {
         solved: r.solved,
         correct: r.correct,
+        accuracy: r.solved ? Math.round((100 * r.correct) / r.solved) : null,
         avgTimeMs: Math.round(r.avgTimeMs || 0),
       };
       solved += r.solved;
@@ -46,6 +52,27 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to fetch stats' });
+  }
+});
+
+// GET /api/stats/history — last 50 attempts newest-first
+router.get('/history', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'not authenticated' });
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const history = await Attempt.find({ userId: objectId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .select('difficulty correct elapsedMs createdAt -_id')
+      .lean();
+
+    res.json({ history });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'failed to fetch history' });
   }
 });
 

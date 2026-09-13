@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { getUserId } = require('../middleware/auth');
 const Puzzle = require('../models/Puzzle');
 const Attempt = require('../models/Attempt');
 const { generatePuzzle, LETTERS, COLS } = require('../lib/generator');
@@ -39,12 +40,12 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// Grade an answer, record the attempt, then retire the puzzle (single use).
+// Grade an answer. If user is logged in, record the Attempt. Retire the puzzle (single use).
 router.post('/:id/answer', async (req, res) => {
   try {
     const { letter, elapsedMs } = req.body;
-    const clientId = req.body.clientId || req.header('x-client-id');
-    if (!clientId) return res.status(400).json({ error: 'clientId required' });
+    const userId = getUserId(req);
+
     if (!LETTERS.includes(letter)) return res.status(400).json({ error: 'invalid letter' });
 
     const puzzle = await Puzzle.findById(req.params.id);
@@ -53,15 +54,18 @@ router.post('/:id/answer', async (req, res) => {
     const correctLetter = LETTERS[puzzle.grid[puzzle.target.row][puzzle.target.col]];
     const correct = letter === correctLetter;
 
-    await Attempt.create({
-      clientId,
-      difficulty: puzzle.difficulty,
-      correct,
-      elapsedMs: Number(elapsedMs) || 0,
-    });
-    await Puzzle.deleteOne({ _id: puzzle._id });
+    // Only record attempt for authenticated users
+    if (userId) {
+      await Attempt.create({
+        userId,
+        difficulty: puzzle.difficulty,
+        correct,
+        elapsedMs: Number(elapsedMs) || 0,
+      });
+    }
 
-    res.json({ correct, correctLetter });
+    await Puzzle.deleteOne({ _id: puzzle._id });
+    res.json({ correct, correctLetter, recorded: !!userId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to grade answer' });
