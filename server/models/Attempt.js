@@ -10,24 +10,27 @@ const attemptSchema = new mongoose.Schema({
   patternTag:    { type: String, default: 'direct' },
 
   correct:       { type: Boolean, required: true },
-  selectedLetter:{ type: String, default: null }, // NEW: what they actually picked, for mistake analysis
+  selectedLetter:{ type: String, default: null },
   correctLetter: { type: String, default: null },
   solveQuality: {
     type: String,
-    enum: ['clean', 'hinted', 'revealed', 'guessed', 'rushed'], // added 'rushed'
+    enum: ['clean', 'hinted', 'revealed', 'guessed', 'rushed'],
     required: true,
     default: 'clean',
   },
   hintUsed: { type: Boolean, default: false },
+  // NEW: elapsed ms *at the moment the hint was requested*, relative to
+  // puzzle start. null if no hint was requested. This lets diagnosis tell
+  // apart "asked for help immediately" (didn't attempt elimination) from
+  // "struggled for a while, then asked" (attempted but stuck) — both
+  // currently collapse into the same `hintUsed: true` flag otherwise.
+  hintRequestedAtMs: { type: Number, default: null },
   elapsedMs: { type: Number, required: true, default: 0 },
 
-  // FULL snapshot now — enough to literally re-render the original grid,
-  // not just the target+path text. Needed so Review Mode can actually show
-  // (and offer a fresh, same-pattern retry of) a missed puzzle.
   puzzleSnapshot: {
     cols:        { type: [String], default: [] },
-    cells:       { type: mongoose.Schema.Types.Mixed, default: [] }, // masked letters, as originally shown
-    allLetters:  { type: mongoose.Schema.Types.Mixed, default: [] }, // full solved grid
+    cells:       { type: mongoose.Schema.Types.Mixed, default: [] },
+    allLetters:  { type: mongoose.Schema.Types.Mixed, default: [] },
     target:      { row: Number, col: Number },
     path:        { type: mongoose.Schema.Types.Mixed, default: [] },
   },

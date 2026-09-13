@@ -12,6 +12,7 @@ import ExamSimulation from './components/ExamSimulation';
 import ReviewMode from './components/ReviewMode';
 import GuidedPractice from './components/GuidedPractice';
 import RapidFire from './components/RapidFire';
+import SkillDrills from './components/SkillDrills'; // NEW
 import Masthead from './components/Masthead';
 import NavTabs from './components/NavTabs';
 import NormalPractice from './components/NormalPractice';
@@ -19,6 +20,8 @@ import PracticeHub from './components/PracticeHub';
 import SessionSetupModal from './components/SessionSetupModal';
 import { TIER_TARGET_MS } from './lib/constants';
 import './styles.css';
+
+const PIVOT_BAND_DISTANCE = { any: null, near: 1, far: 4 };
 
 function Game() {
   const { user, status, logout } = useAuth();
@@ -31,11 +34,13 @@ function Game() {
   const [showReview, setShowReview]   = useState(false);
   const [showLearn, setShowLearn]     = useState(false);
   const [showSimulation, setShowSimulation] = useState(false);
-  const [showGuided, setShowGuided]   = useState(false); // NEW
-  const [showRapidFire, setShowRapidFire] = useState(false); // NEW
+  const [showGuided, setShowGuided]   = useState(false);
+  const [showRapidFire, setShowRapidFire] = useState(false);
+  const [showSkillDrills, setShowSkillDrills] = useState(false); // NEW
   const [activeTab, setActiveTab]     = useState('normal');
 
   const [tier, setTier]       = useState('low');
+  const [pivotBand, setPivotBand] = useState('any'); // NEW
   const [puzzle, setPuzzle]   = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -45,18 +50,21 @@ function Game() {
   const [correctLetter, setCorrectLetter] = useState(null);
   const [feedback, setFeedback]           = useState('');
   const [pivotCells, setPivotCells]       = useState([]);
-  const [explanation, setExplanation]     = useState(null); // NEW
+  const [explanation, setExplanation]     = useState(null);
 
   const [elapsed, setElapsed] = useState(0);
   const startRef    = useRef(null);
   const tickRef     = useRef(null);
   const answeredRef = useRef(false);
   const hintUsedRef = useRef(false);
+  const hintRequestedAtRef = useRef(null); // NEW: ms-from-start when hint first requested
 
   const [stats, setStats]     = useState(null);
   const [history, setHistory] = useState(null);
   const [guestAttempts, setGuestAttempts] = useState([]);
   const [weaknessConfig, setWeaknessConfig] = useState(null);
+  const [personalTargets, setPersonalTargets] = useState(null); // NEW
+  const [targetsPersonalized, setTargetsPersonalized] = useState(false); // NEW
 
   const answered = correctLetter !== null;
 
@@ -69,8 +77,8 @@ function Game() {
   }, [status, user]);
 
   useEffect(() => {
-    if (user) { loadStats(); }
-    else { setStats(null); setHistory(null); }
+    if (user) { loadStats(); loadPersonalTargets(); }
+    else { setStats(null); setHistory(null); setPersonalTargets(null); }
   }, [user]);
 
   async function loadStats() {
@@ -81,7 +89,19 @@ function Game() {
     } catch { /* stats are non-critical */ }
   }
 
-  async function newPuzzle(nextTier = tier) {
+  async function loadPersonalTargets() {
+    try {
+      const data = await api.getPersonalTargets();
+      setPersonalTargets(data.targets);
+      setTargetsPersonalized(!!data.personalized);
+    } catch { /* fall back to static constants silently */ }
+  }
+
+  function effectiveTargetMs(t) {
+    return (personalTargets && personalTargets[t]) || TIER_TARGET_MS[t];
+  }
+
+  async function newPuzzle(nextTier = tier, band = pivotBand) {
     setLoading(true);
     setError('');
     setSelected(null);
@@ -89,11 +109,14 @@ function Game() {
     setExplanation(null);
     answeredRef.current = false;
     hintUsedRef.current = false;
+    hintRequestedAtRef.current = null;
     setFeedback('');
     setPivotCells([]);
     clearInterval(tickRef.current);
     try {
-      const data = await api.generatePuzzle(nextTier);
+      const targetPivotDistance = PIVOT_BAND_DISTANCE[band];
+      const opts = targetPivotDistance != null ? { targetPivotDistance } : {};
+      const data = await api.generatePuzzle(nextTier, opts);
       setPuzzle(data);
       startRef.current = performance.now();
       setElapsed(0);
@@ -125,6 +148,7 @@ function Game() {
     setExplanation(null);
     answeredRef.current = false;
     hintUsedRef.current = false;
+    hintRequestedAtRef.current = null;
     setFeedback('');
     setPivotCells([]);
     clearInterval(tickRef.current);
@@ -155,6 +179,7 @@ function Game() {
   }, []);
 
   function changeTier(nextTier) { setTier(nextTier); newPuzzle(nextTier); }
+  function changePivotBand(band) { setPivotBand(band); newPuzzle(tier, band); }
 
   async function selectAnswer(letter) {
     if (answered || !puzzle) return;
@@ -163,7 +188,10 @@ function Game() {
     const elapsedMs = Math.round(performance.now() - startRef.current);
     setSelected(letter);
     try {
-      const res = await api.submitAnswer(puzzle.puzzleId, letter, elapsedMs, hintUsedRef.current, null);
+      const res = await api.submitAnswer(
+        puzzle.puzzleId, letter, elapsedMs, hintUsedRef.current, null,
+        hintRequestedAtRef.current // NEW
+      );
       setCorrectLetter(res.correctLetter);
       setExplanation(res.explanation || null);
 
@@ -172,16 +200,16 @@ function Game() {
       }
 
       const timeSec = (elapsedMs / 1000).toFixed(1);
-      const target = TIER_TARGET_MS[tier];
+      const target = effectiveTargetMs(tier);
       if (res.correct) {
         const comparison = elapsedMs <= target
-          ? `${timeSec}s \u2713 (target ${target / 1000}s)`
+          ? `${timeSec}s \u2713 (target ${Math.round(target / 1000)}s)`
           : `${timeSec}s (${((elapsedMs - target) / 1000).toFixed(1)}s over target)`;
         setFeedback(`Correct \u2014 ${comparison}`);
       } else {
         setFeedback(`Not quite \u2014 answer is ${res.correctLetter}`);
       }
-      if (user) loadStats();
+      if (user) { loadStats(); loadPersonalTargets(); }
       else setGuestAttempts((prev) => [...prev, { correct: res.correct, elapsedMs }]);
     } catch (err) {
       setError(err.message || 'Could not grade that answer.');
@@ -205,6 +233,10 @@ function Game() {
   async function showHint() {
     if (!puzzle) return;
     try {
+      // NEW: record the elapsed time at first hint request only.
+      if (hintRequestedAtRef.current == null) {
+        hintRequestedAtRef.current = Math.round(performance.now() - startRef.current);
+      }
       const { pivotCells: cells, direct } = await api.getHint(puzzle.puzzleId);
       setPivotCells(cells);
       hintUsedRef.current = true;
@@ -220,7 +252,7 @@ function Game() {
   function handleGuest()   { setGuestMode(true); setShowAuth(false); }
   function handleAuthSuccess() { setShowAuth(false); setGuestMode(false); }
 
-  const overTime = !untimed && elapsed / 1000 > TIER_TARGET_MS[tier] / 1000;
+  const overTime = !untimed && elapsed / 1000 > effectiveTargetMs(tier) / 1000;
   const isGuest  = !user;
 
   if (activeSessionConfig) {
@@ -251,6 +283,9 @@ function Game() {
   }
   if (showRapidFire) {
     return <RapidFire onExit={() => { setShowRapidFire(false); if (user) loadStats(); }} />;
+  }
+  if (showSkillDrills) {
+    return <SkillDrills onClose={() => setShowSkillDrills(false)} />;
   }
 
   const anyOverlayOpen = (showAuth && !user) || showOnboarding || showSessionModal;
@@ -312,6 +347,11 @@ function Game() {
             untimed={untimed}
             onToggleUntimed={() => setUntimed((v) => !v)}
             explanation={explanation}
+            mastery={stats?.mastery}
+            pivotBand={pivotBand}
+            onChangePivotBand={changePivotBand}
+            effectiveTargetMs={effectiveTargetMs(tier)}
+            isPersonalized={targetsPersonalized}
           />
         )}
 
@@ -325,6 +365,7 @@ function Game() {
             onAuth={() => setShowAuth(true)}
             onGuided={() => setShowGuided(true)}
             onRapidFire={() => setShowRapidFire(true)}
+            onSkillDrills={() => setShowSkillDrills(true)}
           />
         )}
 

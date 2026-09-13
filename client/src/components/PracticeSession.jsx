@@ -26,6 +26,7 @@ export default function PracticeSession({ config, onExit }) {
   const startRef = useRef(null);
   const tickRef = useRef(null);
   const answeredRef = useRef(false);
+  const hintRequestedAtRef = useRef(null); // NEW
 
   const { mode, difficulty, questionCount } = config;
   const isExam = mode === 'exam';
@@ -65,6 +66,7 @@ export default function PracticeSession({ config, onExit }) {
     setCorrectLetter(null);
     setSelected(null);
     setHintUsed(false);
+    hintRequestedAtRef.current = null;
     setPivotCells([]);
     setFeedback('');
     clearInterval(tickRef.current);
@@ -89,7 +91,10 @@ export default function PracticeSession({ config, onExit }) {
     const elapsedMs = Math.round(performance.now() - startRef.current);
     setSelected(letter);
 
-    const res = await api.submitAnswer(puzzle.puzzleId, letter, elapsedMs, hintUsed, sessionId);
+    const res = await api.submitAnswer(
+      puzzle.puzzleId, letter, elapsedMs, hintUsed, sessionId,
+      hintRequestedAtRef.current // NEW
+    );
     setCorrectLetter(res.correctLetter);
     setAnswered(true);
     recordAttempt({ correct: res.correct, hintUsed, elapsedMs, solveQuality: res.solveQuality });
@@ -114,6 +119,9 @@ export default function PracticeSession({ config, onExit }) {
 
   async function handleHint() {
     if (answered || !puzzle || isExam) return;
+    if (hintRequestedAtRef.current == null) {
+      hintRequestedAtRef.current = Math.round(performance.now() - startRef.current);
+    }
     const { pivotCells: cells, direct } = await api.getHint(puzzle.puzzleId);
     setPivotCells(cells);
     setHintUsed(true);
@@ -167,7 +175,6 @@ export default function PracticeSession({ config, onExit }) {
 
   return (
     <div className="session-container">
-      {/* Header bar with Back button & session stats */}
       <div className="session-nav-bar">
         <button className="btn-back-pill" onClick={onExit}>
           <Icon.ArrowLeft />
@@ -184,7 +191,6 @@ export default function PracticeSession({ config, onExit }) {
         </div>
       </div>
 
-      {/* Progress Bar */}
       <div className="session-progress-track">
         <div
           className="session-progress-fill"
@@ -192,7 +198,6 @@ export default function PracticeSession({ config, onExit }) {
         />
       </div>
 
-      {/* Practice Question Card */}
       <div className="session-main-card">
         {puzzle && !loading ? (
           <Grid

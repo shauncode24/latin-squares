@@ -3,6 +3,7 @@ import { api } from '../api';
 import { timeStr } from '../lib/format';
 import { TIERS, TIER_LABEL } from '../lib/constants';
 import DueReviews from './DueReviews';
+import ReadinessReport from './ReadinessReport'; // NEW
 
 function Arrow({ delta, invert = false }) {
   if (delta == null || delta === 0) return <span className="trend-flat">–</span>;
@@ -31,7 +32,6 @@ export default function Dashboard({ stats, onPracticeWeakness }) {
   const [trend, setTrend] = useState(null);
   const [weakest, setWeakest] = useState(undefined);
 
-  // NEW: AI coaching state — both on-demand, never called automatically.
   const [aiDiagnosis, setAiDiagnosis] = useState(null);
   const [aiDiagnosisLoading, setAiDiagnosisLoading] = useState(false);
   const [aiStrategy, setAiStrategy] = useState(null);
@@ -78,6 +78,8 @@ export default function Dashboard({ stats, onPracticeWeakness }) {
 
   return (
     <div className="dashboard">
+      <ReadinessReport />
+
       <DueReviews />
 
       {weakest && (
@@ -85,8 +87,11 @@ export default function Dashboard({ stats, onPracticeWeakness }) {
           <div className="dashboard-next-label">Do this next</div>
           <div className="dashboard-next-row">
             <span>
-              Weakest pattern: <strong>{TIER_LABEL[weakest.difficulty] || weakest.difficulty}</strong>
-              {' '}/ {weakest.patternTag} — {weakest.accuracy}% accuracy over {weakest.sampleSize} attempts
+              {weakest.reason === 'speed' ? 'Slowest pattern' : 'Weakest pattern'}: <strong>{TIER_LABEL[weakest.difficulty] || weakest.difficulty}</strong>
+              {' '}/ {weakest.patternTag} —{' '}
+              {weakest.reason === 'speed'
+                ? `${weakest.accuracy}% accurate but averaging ${Math.round((weakest.avgTimeMs || 0) / 1000)}s vs a ${Math.round((weakest.targetMs || 0) / 1000)}s target`
+                : `${weakest.accuracy}% accuracy over ${weakest.sampleSize} attempts`}
             </span>
             <button
               className="btn primary"
@@ -136,7 +141,6 @@ export default function Dashboard({ stats, onPracticeWeakness }) {
             </div>
           ))}
 
-          {/* NEW: AI narration on top of the deterministic diagnosis above */}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
             {!aiDiagnosis && (
               <button className="btn-link" onClick={requestAiDiagnosis} disabled={aiDiagnosisLoading}>
@@ -150,7 +154,6 @@ export default function Dashboard({ stats, onPracticeWeakness }) {
         </div>
       )}
 
-      {/* NEW: AI strategy coach — separate, analyzes solving order/timing */}
       <div className="dashboard-next">
         <div className="dashboard-next-label">Strategy check</div>
         {!aiStrategy && (

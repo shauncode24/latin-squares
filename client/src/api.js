@@ -45,10 +45,11 @@ export const api = {
     request('POST', '/api/puzzles/generate', { difficulty, ...opts }),
   generateSimilar: (rounds, pivotDistance, difficulty = 'medium') =>
     request('POST', '/api/puzzles/practice-similar', { rounds, pivotDistance, difficulty }),
-  submitAnswer: (puzzleId, letter, elapsedMs = 0, hintUsed = false, sessionId = null) =>
-    request('POST', `/api/puzzles/${puzzleId}/answer`, { letter, elapsedMs, hintUsed, sessionId }),
+  // UPDATED: accepts optional hintRequestedAtMs for the hint-timing signal.
+  submitAnswer: (puzzleId, letter, elapsedMs = 0, hintUsed = false, sessionId = null, hintRequestedAtMs = null) =>
+    request('POST', `/api/puzzles/${puzzleId}/answer`, { letter, elapsedMs, hintUsed, sessionId, hintRequestedAtMs }),
   revealAnswer: (puzzleId) => request('GET', `/api/puzzles/${puzzleId}/reveal`),
-  getHint: (puzzleId, round = 0) => request('GET', `/api/puzzles/${puzzleId}/hint?round=${round}`), // CHANGED
+  getHint: (puzzleId, round = 0) => request('GET', `/api/puzzles/${puzzleId}/hint?round=${round}`),
 
   getStats:      () => request('GET', '/api/stats'),
   getHistory:    () => request('GET', '/api/stats/history'),
@@ -56,6 +57,9 @@ export const api = {
     request('GET', `/api/stats/timeseries?view=${view}&interval=${interval}`),
   getWeakest:    () => request('GET', '/api/stats/weakest'),
   getTrend:      () => request('GET', '/api/stats/trend'),
+  // NEW
+  getPersonalTargets: () => request('GET', '/api/stats/personal-targets'),
+  getReadiness:       () => request('GET', '/api/stats/readiness'),
 
   createSession:   (mode, difficulty, questionCount) =>
     request('POST',  '/api/sessions', { mode, difficulty, questionCount }),
@@ -69,7 +73,6 @@ export const api = {
   submitReview: (difficulty, rounds, pivotDistance, correct, hintUsed) =>
     request('POST', '/api/sr/review', { difficulty, rounds, pivotDistance, correct, hintUsed }),
 
-  // NEW: AI coaching — thin narration layer, both on-demand only.
   getAiDiagnosis: (diagnosis) => request('POST', '/api/coach/diagnosis', { diagnosis }),
   getAiStrategy:  () => request('GET', '/api/coach/strategy'),
 };

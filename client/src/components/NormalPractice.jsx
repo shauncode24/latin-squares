@@ -5,6 +5,24 @@ import { Icon } from './icons';
 import { TIERS, TIER_LABEL, TIER_DESC, TIER_TARGET_LABEL } from '../lib/constants';
 import { pivotLabel } from '../lib/format';
 
+const PIVOT_BANDS = [
+  { key: 'any', label: 'Any', targetPivotDistance: null },
+  { key: 'near', label: 'Near pivot', targetPivotDistance: 1 },
+  { key: 'far', label: 'Distant pivot', targetPivotDistance: 4 },
+];
+
+// Soft, non-blocking nudge — never disables a tier, just informs.
+function tierRecommendationNote(tier, mastery) {
+  if (!mastery) return null;
+  if (tier === 'medium' && mastery.low === 'learning') {
+    return 'Still building Low — Medium is available, but Low accuracy usually pays off first.';
+  }
+  if (tier === 'high' && (mastery.medium === 'learning' || mastery.low === 'learning')) {
+    return 'High requires chaining 2-3 deductions — comfortable Medium performance usually makes this much easier.';
+  }
+  return null;
+}
+
 export default function NormalPractice({
   tier,
   onChangeTier,
@@ -31,6 +49,11 @@ export default function NormalPractice({
   untimed,
   onToggleUntimed,
   explanation,
+  mastery,          // NEW: stats.mastery, optional
+  pivotBand,        // NEW: current pivot band key
+  onChangePivotBand,// NEW: (bandKey) => void
+  effectiveTargetMs,// NEW: adaptive target override, optional
+  isPersonalized,   // NEW: whether effectiveTargetMs came from personal data
 }) {
   useEffect(() => {
     function handleKeyDown(e) {
@@ -45,26 +68,57 @@ export default function NormalPractice({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [loading, answered, puzzle, onNewGrid]);
 
+  const targetLabel = effectiveTargetMs
+    ? `${Math.round(effectiveTargetMs / 1000)}s${isPersonalized ? ' (personal)' : ''}`
+    : TIER_TARGET_LABEL[tier];
+
   return (
     <div className="drill-container">
       <aside className="drill-sidebar-left">
         <div className="tiers">
-          {TIERS.map((t) => (
-            <button
-              key={t}
-              className={`tier-card${t === tier ? ' active' : ''}`}
-              onClick={() => onChangeTier(t)}
-            >
-              <div className="tier-card-title">{TIER_LABEL[t]}</div>
-              <div className="tier-card-desc">{TIER_DESC[t]}</div>
-            </button>
-          ))}
+          {TIERS.map((t) => {
+            const note = tierRecommendationNote(t, mastery);
+            return (
+              <button
+                key={t}
+                className={`tier-card${t === tier ? ' active' : ''}`}
+                onClick={() => onChangeTier(t)}
+                title={note || undefined}
+              >
+                <div className="tier-card-title">
+                  {TIER_LABEL[t]}
+                  {note && <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>⚠</span>}
+                </div>
+                <div className="tier-card-desc">{TIER_DESC[t]}</div>
+                {note && t !== tier && (
+                  <div style={{ fontSize: 10.5, marginTop: 4, opacity: 0.75 }}>{note}</div>
+                )}
+              </button>
+            );
+          })}
         </div>
+
+        {tier !== 'low' && onChangePivotBand && (
+          <div className="session-option-group">
+            <div className="session-option-label">Pivot range</div>
+            <div className="session-option-row">
+              {PIVOT_BANDS.map((b) => (
+                <button
+                  key={b.key}
+                  className={`session-option-btn${pivotBand === b.key ? ' active' : ''}`}
+                  onClick={() => onChangePivotBand(b.key)}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </aside>
 
       <main className="drill-center">
         <div className="status-row">
-          <span>Target: {TIER_TARGET_LABEL[tier]}</span>
+          <span>Target: {targetLabel}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', userSelect: 'none' }}>
               <input type="checkbox" checked={!!untimed} onChange={onToggleUntimed} />
@@ -76,7 +130,6 @@ export default function NormalPractice({
           </div>
         </div>
 
-        {/* Pivot-distance & pattern info */}
         {puzzle && puzzle.rounds > 0 && (
           <div style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 11, color: 'var(--ink-soft)', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>
@@ -127,7 +180,6 @@ export default function NormalPractice({
           {feedback || '\u00a0'}
         </div>
 
-        {/* Deterministic step-by-step walkthrough after a wrong answer */}
         {answered && explanation && explanation.length > 0 && (
           <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', background: '#fafafa', border: '1px solid var(--line)', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
             <strong style={{ color: 'var(--ink)', fontSize: 12 }}>How to solve it:</strong>

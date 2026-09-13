@@ -24,9 +24,9 @@ function shuffleDeck(arr) {
 
 export default function ExamSimulation({ onExit }) {
   const [sessionId, setSessionId] = useState(null);
-  const [order] = useState(() => shuffleDeck(DISTRIBUTION).slice(0, TOTAL_QUESTIONS)); // tier per slot, fixed
-  const [status, setStatus] = useState(() => new Array(TOTAL_QUESTIONS).fill('unseen')); // 'unseen' | 'flagged' | 'answered'
-  const [queue, setQueue] = useState(() => order.map((_, i) => i)); // traversal order of slot indices
+  const [order] = useState(() => shuffleDeck(DISTRIBUTION).slice(0, TOTAL_QUESTIONS));
+  const [status, setStatus] = useState(() => new Array(TOTAL_QUESTIONS).fill('unseen'));
+  const [queue, setQueue] = useState(() => order.map((_, i) => i));
   const [puzzle, setPuzzle] = useState(null);
   const [selected, setSelected] = useState(null);
   const [answered, setAnswered] = useState(false);
@@ -34,15 +34,21 @@ export default function ExamSimulation({ onExit }) {
   const [summary, setSummary] = useState(null);
   const [prevRun, setPrevRun] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showReviewGate, setShowReviewGate] = useState(false); // NEW
 
   const clockStartRef = useRef(null);
   const clockRef = useRef(null);
   const qStartRef = useRef(null);
   const finishingRef = useRef(false);
+  // NEW: cache the actual generated puzzle per slot index, so revisiting a
+  // skipped/flagged slot shows the SAME question instead of a fresh one —
+  // matching how a real exam's "flag and return" behaves.
+  const puzzleCacheRef = useRef({});
 
   const currentSlot = queue[0];
   const answeredCount = status.filter((s) => s === 'answered').length;
   const flaggedCount = status.filter((s) => s === 'flagged').length;
+  const unseenRemaining = status.filter((s) => s === 'unseen').length;
 
   useEffect(() => {
     (async () => {
@@ -53,7 +59,7 @@ export default function ExamSimulation({ onExit }) {
       setSessionId(sess.sessionId);
       clockStartRef.current = performance.now();
       clockRef.current = setInterval(tick, 250);
-      await loadSlot(order[0]);
+      await loadSlot(queue[0]);
     })();
     return () => clearInterval(clockRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,7 +70,7 @@ export default function ExamSimulation({ onExit }) {
       if (e.key === 'Enter') {
         if (summary) {
           onExit();
-        } else if (answered) {
+        } else if (answered && !showReviewGate) {
           e.preventDefault();
           advance();
         }
@@ -73,7 +79,7 @@ export default function ExamSimulation({ onExit }) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answered, summary, queue, sessionId, onExit]);
+  }, [answered, summary, queue, sessionId, onExit, showReviewGate]);
 
   function tick() {
     const remaining = TOTAL_TIME_MS - (performance.now() - clockStartRef.current);
@@ -85,12 +91,21 @@ export default function ExamSimulation({ onExit }) {
     }
   }
 
-  async function loadSlot(slotTier) {
+  // UPDATED: loadSlot now takes a *slot index* (not just a tier), and checks
+  // the cache before generating a new puzzle.
+  async function loadSlot(slotIndex) {
     setLoading(true);
     setAnswered(false);
     setSelected(null);
     try {
-      const data = await api.generatePuzzle(slotTier);
+      const cached = puzzleCacheRef.current[slotIndex];
+      if (cached) {
+        setPuzzle(cached);
+        qStartRef.current = performance.now();
+        return;
+      }
+      const data = await api.generatePuzzle(order[slotIndex]);
+      puzzleCacheRef.current[slotIndex] = data;
       setPuzzle(data);
       qStartRef.current = performance.now();
     } finally {
@@ -111,15 +126,18 @@ export default function ExamSimulation({ onExit }) {
       next[currentSlot] = 'answered';
       return next;
     });
+    // Answered slot's cached puzzle can be dropped — it's graded now and
+    // won't be revisited.
+    delete puzzleCacheRef.current[currentSlot];
   }
 
-  // Real-exam triage: leave this question, come back to it later. It's
-  // requeued at the back rather than remembered exactly — puzzles here are
-  // single-use and freshly generated, so returning to a flagged slot means
-  // a new puzzle of the same difficulty, not the identical grid.
+  // Real-exam triage: leave this question, come back to it later — now
+  // actually returns to the SAME puzzle via the cache, not a fresh one.
   async function skipCurrent() {
     if (currentSlot == null || answered || queue.length <= 1) return;
     const slotToRequeue = currentSlot;
+    // Cache the puzzle currently on screen before moving away from it.
+    if (puzzle) puzzleCacheRef.current[slotToRequeue] = puzzle;
     const nextQueue = [...queue.slice(1), slotToRequeue];
     setStatus((prev) => {
       const next = prev.slice();
@@ -127,23 +145,39 @@ export default function ExamSimulation({ onExit }) {
       return next;
     });
     setQueue(nextQueue);
-    await loadSlot(order[nextQueue[0]]);
+    await loadSlot(nextQueue[0]);
   }
 
   async function advance() {
     const restOfQueue = queue.slice(1);
     setQueue(restOfQueue);
     if (restOfQueue.length === 0) {
+      // NEW: if flagged/unanswered items remain, gate on a review screen
+      // instead of silently finishing — mirrors a real exam's "review
+      // before submit" step.
+      if (flaggedCount > 0 || unseenRemaining > 0) {
+        setShowReviewGate(true);
+        return;
+      }
       finish();
       return;
     }
-    await loadSlot(order[restOfQueue[0]]);
+    await loadSlot(restOfQueue[0]);
+  }
+
+  // NEW: jump back into a specific flagged/unanswered slot from the review gate.
+  async function resumeSlot(slotIndex) {
+    setShowReviewGate(false);
+    const rest = queue.filter((s) => s !== slotIndex);
+    setQueue([slotIndex, ...rest]);
+    await loadSlot(slotIndex);
   }
 
   async function finish() {
     if (finishingRef.current) return;
     finishingRef.current = true;
     clearInterval(clockRef.current);
+    setShowReviewGate(false);
     try {
       const data = await api.completeSession(sessionId);
       setSummary(data?.summary || { attempted: 0, correct: 0 });
@@ -204,6 +238,40 @@ export default function ExamSimulation({ onExit }) {
         <button className="btn primary btn-lg" onClick={onExit}>
           <Icon.ArrowLeft /> Back to Dashboard
         </button>
+      </div>
+    );
+  }
+
+  // NEW: pre-submit review gate
+  if (showReviewGate) {
+    const pendingSlots = status
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => s === 'flagged' || s === 'unseen');
+
+    return (
+      <div className="session-container">
+        <div className="session-summary-card" style={{ maxWidth: 640 }}>
+          <h2>Review Before Submitting</h2>
+          <p className="summary-note-text">
+            You have {pendingSlots.length} question{pendingSlots.length > 1 ? 's' : ''} not yet
+            answered ({flaggedCount} flagged, {unseenRemaining} unseen). Revisit them now, or submit as-is.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', margin: '16px 0' }}>
+            {pendingSlots.map(({ i }) => (
+              <button
+                key={i}
+                className="session-option-btn"
+                style={{ width: 'auto', padding: '8px 14px' }}
+                onClick={() => resumeSlot(i)}
+              >
+                {status[i] === 'flagged' ? '🚩 ' : ''}Q{i + 1} ({order[i]})
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button className="btn primary btn-lg" onClick={finish}>Submit Anyway</button>
+          </div>
+        </div>
       </div>
     );
   }

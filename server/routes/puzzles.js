@@ -81,7 +81,9 @@ router.post('/practice-similar', async (req, res) => {
 // POST /api/puzzles/:id/answer
 router.post('/:id/answer', async (req, res) => {
   try {
-    const { letter, elapsedMs, hintUsed = false, sessionId = null } = req.body;
+    // NEW: hintRequestedAtMs — ms elapsed (from client's own timer) at the
+    // moment the user requested a hint, or null if they never did.
+    const { letter, elapsedMs, hintUsed = false, sessionId = null, hintRequestedAtMs = null } = req.body;
     const userId = getUserId(req);
 
     if (!LETTERS.includes(letter)) {
@@ -109,8 +111,6 @@ router.post('/:id/answer', async (req, res) => {
       solveQuality = 'clean';
     }
 
-    // Computed unconditionally now — needed for the explanation regardless
-    // of whether this attempt gets logged (guests get explanations too).
     const cells = puzzle.grid.map((row, r) =>
       row.map((v, c) => {
         if (r === puzzle.target.row && c === puzzle.target.col) return null;
@@ -132,6 +132,7 @@ router.post('/:id/answer', async (req, res) => {
         correctLetter,
         solveQuality,
         hintUsed,
+        hintRequestedAtMs: hintUsed ? (Number.isFinite(hintRequestedAtMs) ? hintRequestedAtMs : null) : null,
         elapsedMs: elapsed,
         puzzleSnapshot: {
           cols: COLS,
@@ -157,7 +158,7 @@ router.post('/:id/answer', async (req, res) => {
       pivotCells: puzzle.path && puzzle.path.length ? puzzle.path[0] : [],
       rounds: puzzle.rounds,
       pivotDistance: puzzle.pivotDistance,
-      explanation, // NEW: deterministic step-by-step walkthrough
+      explanation,
     });
   } catch (err) {
     console.error(err);
@@ -207,7 +208,7 @@ router.get('/:id/reveal', async (req, res) => {
       cells, allLetters, target: puzzle.target, path: puzzle.path, cols: COLS,
     });
 
-    res.json({ correctLetter, explanation }); // NEW: explanation
+    res.json({ correctLetter, explanation });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to reveal answer' });
@@ -215,8 +216,6 @@ router.get('/:id/reveal', async (req, res) => {
 });
 
 // GET /api/puzzles/:id/hint?round=n
-// Supports revealing the deduction chain one round at a time (used by
-// Guided Practice) instead of only the first pivot round.
 router.get('/:id/hint', async (req, res) => {
   try {
     const puzzle = await Puzzle.findOne({ _id: req.params.id, answeredAt: null });

@@ -3,7 +3,7 @@ import { Icon } from './icons';
 import { TIERS } from '../lib/constants';
 import DueReviews from './DueReviews';
 
-export default function PracticeHub({ user, onStartSession, onStartSimulation, onReview, onLearn, onAuth, onGuided, onRapidFire }) {
+export default function PracticeHub({ user, onStartSession, onStartSimulation, onReview, onLearn, onAuth, onGuided, onRapidFire, onSkillDrills }) {
   const [mode, setMode] = useState('practice');
   const [difficulty, setDifficulty] = useState('low');
   const [count, setCount] = useState(10);
@@ -13,7 +13,6 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
       {user && <DueReviews />}
 
       <div className="practice-hub-grid">
-        {/* Card 1: Custom Practice Session */}
         <div className="hub-card">
           <div className="hub-card-header">
             <div className="hub-card-icon"><Icon.List /></div>
@@ -87,7 +86,6 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
           </div>
         </div>
 
-        {/* Card 2: Full Exam Simulation */}
         <div className="hub-card">
           <div className="hub-card-header">
             <div className="hub-card-icon"><Icon.Timer /></div>
@@ -125,7 +123,6 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
           </div>
         </div>
 
-        {/* Card 3: Guided Practice — NEW */}
         <div className="hub-card">
           <div className="hub-card-header">
             <div className="hub-card-icon"><Icon.Lightbulb /></div>
@@ -143,7 +140,6 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
           </div>
         </div>
 
-        {/* Card 4: Rapid-Fire Drill — NEW */}
         <div className="hub-card">
           <div className="hub-card-header">
             <div className="hub-card-icon"><Icon.Zap /></div>
@@ -161,7 +157,25 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
           </div>
         </div>
 
-        {/* Card 5: Review & Learn */}
+        {/* NEW: Skill Drills card — isolated sub-skill training, no sign-in needed */}
+        <div className="hub-card">
+          <div className="hub-card-header">
+            <div className="hub-card-icon"><Icon.Target /></div>
+            <div>
+              <h3 className="hub-card-title">Foundational Skill Drills</h3>
+              <p className="hub-card-desc">
+                Isolate candidate elimination and pattern recognition as standalone drills —
+                the sub-skills full puzzles bundle together.
+              </p>
+            </div>
+          </div>
+          <div className="hub-card-footer">
+            <button className="btn primary" style={{ width: '100%' }} onClick={onSkillDrills}>
+              Start Skill Drills →
+            </button>
+          </div>
+        </div>
+
         <div className="hub-card">
           <div className="hub-card-header">
             <div className="hub-card-icon"><Icon.Book /></div>
