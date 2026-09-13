@@ -5,6 +5,7 @@ const Attempt = require('../models/Attempt');
 
 router.use(attachUser);
 const TIERS = ['low', 'medium', 'high'];
+const TIER_TARGET_MS = { low: 20000, medium: 50000, high: 75000 };
 
 function median(nums) {
   if (!nums.length) return null;
@@ -29,10 +30,27 @@ function summarize(attempts) {
   };
 }
 
+// NEW: composite Learning -> Competent -> Fast -> Exam-Ready progression per
+// tier, based on sample size, accuracy, and whether average time beats the
+// tier's target.
+function computeMastery(byTier) {
+  const mastery = {};
+  for (const t of TIERS) {
+    const d = byTier[t];
+    if (!d || d.solved < 5 || d.accuracy == null) { mastery[t] = 'learning'; continue; }
+    const fastEnough = d.avgTimeMs != null && d.avgTimeMs <= TIER_TARGET_MS[t];
+    if (d.accuracy >= 90 && fastEnough && d.solved >= 15) mastery[t] = 'exam-ready';
+    else if (d.accuracy >= 85 && fastEnough) mastery[t] = 'fast';
+    else if (d.accuracy >= 60) mastery[t] = 'competent';
+    else mastery[t] = 'learning';
+  }
+  return mastery;
+}
+
 // GET /api/stats
 router.get('/', async (req, res) => {
   try {
-    if (!req.userId) return res.json({ overall: null, byTier: {}, byPattern: {}, streaks: null, personalBests: {} });
+    if (!req.userId) return res.json({ overall: null, byTier: {}, byPattern: {}, streaks: null, personalBests: {}, mastery: {} });
 
     const all = await Attempt.find({ userId: req.userId }).lean();
     const overall = summarize(all);
@@ -78,6 +96,7 @@ router.get('/', async (req, res) => {
       overall, byTier, byPattern,
       streaks: { current, best },
       personalBests: cleanByTier,
+      mastery: computeMastery(byTier),
     });
   } catch (err) {
     console.error(err);
@@ -143,9 +162,7 @@ router.get('/timeseries', async (req, res) => {
   }
 });
 
-// NEW: GET /api/stats/weakest — powers Weakness Mode + the dashboard recommendation.
-// Looks at recent attempts per (rounds, patternTag) bucket, needs a minimum
-// sample size before flagging anything (avoids noisy 1-attempt "weaknesses").
+// GET /api/stats/weakest — powers Weakness Mode + Dashboard's "do this next".
 router.get('/weakest', async (req, res) => {
   try {
     if (!req.userId) return res.json({ weakest: null });
@@ -184,6 +201,34 @@ router.get('/weakest', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to compute weakest bucket' });
+  }
+});
+
+// NEW: GET /api/stats/trend — this week vs last week, for the Dashboard's
+// trend arrows ("vs. last week").
+router.get('/trend', async (req, res) => {
+  try {
+    if (!req.userId) return res.json({ trend: null });
+    const now = Date.now();
+    const weekMs = 7 * 86400000;
+    const [thisWeek, lastWeek] = await Promise.all([
+      Attempt.find({ userId: req.userId, createdAt: { $gte: new Date(now - weekMs) } }).lean(),
+      Attempt.find({ userId: req.userId, createdAt: { $gte: new Date(now - 2 * weekMs), $lt: new Date(now - weekMs) } }).lean(),
+    ]);
+    const cur = summarize(thisWeek);
+    const prev = summarize(lastWeek);
+    res.json({
+      trend: {
+        current: cur,
+        previous: prev,
+        solvedDelta: cur.solved - prev.solved,
+        accuracyDelta: (cur.accuracy ?? 0) - (prev.accuracy ?? 0),
+        avgTimeDeltaMs: prev.avgTimeMs != null && cur.avgTimeMs != null ? cur.avgTimeMs - prev.avgTimeMs : null,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'failed to compute trend' });
   }
 });
 

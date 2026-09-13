@@ -43,7 +43,6 @@ export const api = {
 
   generatePuzzle: (difficulty = 'medium', opts = {}) =>
     request('POST', '/api/puzzles/generate', { difficulty, ...opts }),
-  // NEW: for Weakness Mode + "practice a similar one" from Review
   generateSimilar: (rounds, pivotDistance, difficulty = 'medium') =>
     request('POST', '/api/puzzles/practice-similar', { rounds, pivotDistance, difficulty }),
   submitAnswer: (puzzleId, letter, elapsedMs = 0, hintUsed = false, sessionId = null) =>
@@ -54,12 +53,14 @@ export const api = {
   getStats:      () => request('GET', '/api/stats'),
   getHistory:    () => request('GET', '/api/stats/history'),
   getTimeseries: (bucket = 'daily') => request('GET', `/api/stats/timeseries?bucket=${bucket}`),
-  getWeakest:    () => request('GET', '/api/stats/weakest'), // NEW
+  getWeakest:    () => request('GET', '/api/stats/weakest'),
+  getTrend:      () => request('GET', '/api/stats/trend'), // NEW
 
   createSession:   (mode, difficulty, questionCount) =>
     request('POST',  '/api/sessions', { mode, difficulty, questionCount }),
   getSession:      (sessionId) => request('GET',   `/api/sessions/${sessionId}`),
   completeSession: (sessionId) => request('PATCH', `/api/sessions/${sessionId}/complete`),
+  getSimulationHistory: () => request('GET', '/api/sessions/simulations/history'), // NEW
 
   getMissed: () => request('GET', '/api/review/missed'),
 
@@ -67,4 +68,3 @@ export const api = {
   submitReview: (difficulty, rounds, pivotDistance, correct, hintUsed) =>
     request('POST', '/api/sr/review', { difficulty, rounds, pivotDistance, correct, hintUsed }),
 };
-

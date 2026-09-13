@@ -8,6 +8,7 @@ import { timeStr, relTime } from '../lib/format';
 
 const TIERS = ['low', 'medium', 'high'];
 const TIER_LABEL = { low: 'Low', medium: 'Med', high: 'High' };
+const HISTORY_PAGE = 10;
 
 function TimeseriesChart() {
   const [data, setData] = useState(null);
@@ -81,46 +82,12 @@ function TimeseriesChart() {
   );
 }
 
-// FIX: was computed off global accuracy only. Now flags a specific tier.
-function AdaptiveBanner({ stats }) {
-  if (!stats || !stats.byTier) return null;
-  for (const t of TIERS) {
-    const d = stats.byTier[t];
-    if (!d || d.solved < 5) continue;
-    if (d.accuracy >= 90) {
-      return <div className="adaptive-banner good">Strong on {TIER_LABEL[t]} ({d.accuracy}%) — try the next difficulty up.</div>;
-    }
-    if (d.accuracy != null && d.accuracy < 60) {
-      return <div className="adaptive-banner warn">{TIER_LABEL[t]} accuracy is {d.accuracy}% — worth reinforcing before moving up.</div>;
-    }
-  }
-  return null;
-}
-
-function WeaknessCard({ onPractice }) {
-  const [weakest, setWeakest] = useState(undefined); // undefined = loading
-
-  useEffect(() => {
-    api.getWeakest().then((d) => setWeakest(d.weakest)).catch(() => setWeakest(null));
-  }, []);
-
-  if (weakest === undefined || !weakest) return null;
-
-  return (
-    <div className="adaptive-banner warn" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-      <span>
-        Weakest spot: {weakest.difficulty} / {weakest.patternTag.replace(/-/g, ' ')} — {weakest.accuracy}% over last {weakest.sampleSize}
-      </span>
-      <button className="btn-link" onClick={() => onPractice(weakest)}>Practice this →</button>
-    </div>
-  );
-}
-
-export default function Stats({ stats, history, isGuest, guestAttempts, onSignUpNudge, onPracticeWeakness }) {
+export default function Stats({ stats, history, isGuest, guestAttempts, onSignUpNudge }) {
   const overall = stats && stats.overall;
   const byTier  = (stats && stats.byTier) || {};
   const streaks  = stats && stats.streaks;
   const pbs      = (stats && stats.personalBests) || {};
+  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
 
   if (isGuest) {
     const solved  = (guestAttempts && guestAttempts.length) || 0;
@@ -145,11 +112,10 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
     );
   }
 
+  const visibleHistory = history ? history.slice(0, historyShown) : [];
+
   return (
     <div className="stats-panel">
-      <AdaptiveBanner stats={stats} />
-      {onPracticeWeakness && <WeaknessCard onPractice={onPracticeWeakness} />}
-
       {streaks && (streaks.current > 0 || streaks.best > 0) && (
         <div className="streaks-row">
           <span className="streak-chip">{'🔥'} {streaks.current} day practice streak</span>
@@ -232,7 +198,7 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
         <div className="stats-history-section">
           <div className="stats-section-title">Recent attempts</div>
           <div className="history-list">
-            {history.map((a, i) => (
+            {visibleHistory.map((a, i) => (
               <div key={i} className={'history-row' + (a.correct ? ' correct' : ' wrong')}>
                 <span className={'tier-badge tier-badge-' + a.difficulty}>{TIER_LABEL[a.difficulty]}</span>
                 <span className="history-result">{a.correct ? '\u2713' : '\u2717'}</span>
@@ -242,6 +208,11 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
               </div>
             ))}
           </div>
+          {history.length > historyShown && (
+            <button className="btn-link history-load-more" onClick={() => setHistoryShown((n) => n + HISTORY_PAGE)}>
+              Show more
+            </button>
+          )}
         </div>
       )}
 

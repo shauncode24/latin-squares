@@ -12,10 +12,13 @@ const QUALITY_LABEL = {
   rushed: 'Rushed',
 };
 
+const PAGE_SIZE = 10;
+
 export default function ReviewMode({ onClose }) {
   const [missed, setMissed] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [retryItem, setRetryItem] = useState(null); // the Attempt being retried
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const [retryItem, setRetryItem] = useState(null);
   const [retryPuzzle, setRetryPuzzle] = useState(null);
   const [retryAnswer, setRetryAnswer] = useState(null);
 
@@ -30,8 +33,6 @@ export default function ReviewMode({ onClose }) {
     setRetryItem(item);
     setRetryPuzzle(null);
     setRetryAnswer(null);
-    // Generates a NEW puzzle with the same rounds/pivotDistance profile —
-    // not the literal old grid, since the user already knows that answer.
     const data = await api.generateSimilar(item.rounds, item.pivotDistance, item.difficulty);
     setRetryPuzzle(data);
   }
@@ -94,6 +95,8 @@ export default function ReviewMode({ onClose }) {
     );
   }
 
+  const visible = missed.slice(0, shown);
+
   return (
     <div className="review-wrap">
       <div className="review-header">
@@ -101,7 +104,7 @@ export default function ReviewMode({ onClose }) {
         <button className="btn-link" onClick={onClose}>× Close</button>
       </div>
       <div className="review-list">
-        {missed.map((a) => (
+        {visible.map((a) => (
           <div key={a._id} className={`review-item${a.correct ? ' correct' : ' wrong'}`}>
             <div className="review-meta">
               <span className={`tier-badge tier-badge-${a.difficulty}`}>{a.difficulty}</span>
@@ -119,6 +122,11 @@ export default function ReviewMode({ onClose }) {
           </div>
         ))}
       </div>
+      {missed.length > shown && (
+        <button className="btn-link history-load-more" onClick={() => setShown((n) => n + PAGE_SIZE)}>
+          Show more
+        </button>
+      )}
     </div>
   );
 }

@@ -746,3 +746,110 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* --- De-emphasized Reveal vs Hint -------------------------- */
+.btn.btn-muted {
+  background: transparent;
+  color: var(--ink-soft);
+  border-style: dashed;
+}
+.btn.btn-muted:hover:not(:disabled) {
+  border-color: var(--wrong);
+  color: var(--wrong);
+}
+
+/* --- Load more (history / review pagination) --------------- */
+.history-load-more {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  width: 100%;
+  font-size: 12px;
+}
+
+/* --- Dashboard ---------------------------------------------- */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.dashboard-next {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.dashboard-next-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.dashboard-next-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.dashboard-mastery-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.mastery-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+}
+.mastery-tier { font-weight: 600; color: var(--ink-soft); }
+.mastery-state { font-size: 11px; font-weight: 700; }
+.mastery-learning   { background: #f5f6f2; }
+.mastery-learning .mastery-state { color: var(--ink-soft); }
+.mastery-competent  { background: #fff8e1; }
+.mastery-competent .mastery-state { color: #f57f17; }
+.mastery-fast       { background: #e8f5e9; }
+.mastery-fast .mastery-state { color: #2e7d32; }
+.mastery-exam-ready { background: var(--accent-soft); }
+.mastery-exam-ready .mastery-state { color: var(--accent); }
+
+.dashboard-trend-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.trend-item { display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.trend-label { font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.trend-value { font-family: var(--mono); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.trend-up   { color: var(--accent); font-size: 11px; }
+.trend-down { color: var(--wrong); font-size: 11px; }
+.trend-flat { color: var(--ink-soft); font-size: 11px; }
+
+/* --- Due (spaced repetition) review card -------------------- */
+.due-review-active {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+/* --- Learn mode ---------------------------------------------- */
+.learn-wrap { padding: 0; }
+.learn-body {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  margin: 0 0 14px;
+}

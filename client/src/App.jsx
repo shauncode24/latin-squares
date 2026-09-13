@@ -5,9 +5,12 @@ import { SessionProvider } from './SessionContext';
 import Grid from './components/Grid';
 import AnswerPad from './components/AnswerPad';
 import Stats from './components/Stats';
+import Dashboard from './components/Dashboard';
 import AuthScreen from './components/AuthScreen';
 import Onboarding from './components/Onboarding';
+import LearnMode from './components/LearnMode';
 import PracticeSession from './components/PracticeSession';
+import ExamSimulation from './components/ExamSimulation';
 import ReviewMode from './components/ReviewMode';
 import './styles.css';
 
@@ -21,7 +24,13 @@ function SessionSetupModal({ onStart, onClose }) {
   const [difficulty, setDifficulty] = useState('low');
   const [count, setCount] = useState(10);
   return (
-    <div className="session-modal-overlay" onClick={onClose}>
+    <div
+      className="session-modal-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Start a session"
+    >
       <div className="session-modal" onClick={(e) => e.stopPropagation()}>
         <h3>Start a Session</h3>
         <div className="session-option-group">
@@ -74,6 +83,8 @@ function Game() {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [activeSessionConfig, setActiveSessionConfig] = useState(null);
   const [showReview, setShowReview]   = useState(false);
+  const [showLearn, setShowLearn]     = useState(false);
+  const [showSimulation, setShowSimulation] = useState(false);
 
   const [tier, setTier]       = useState('low');
   const [puzzle, setPuzzle]   = useState(null);
@@ -203,6 +214,13 @@ function Game() {
     try {
       const res = await api.submitAnswer(puzzle.puzzleId, letter, elapsedMs, hintUsedRef.current, null);
       setCorrectLetter(res.correctLetter);
+
+      // Same fix as PracticeSession.jsx: surface the deduction chain
+      // automatically on a wrong answer, not just when a hint was requested.
+      if (!res.correct) {
+        setPivotCells(res.pivotCells || []);
+      }
+
       const timeSec = (elapsedMs / 1000).toFixed(1);
       const target = TIER_TARGET_MS[tier];
       if (res.correct) {
@@ -254,7 +272,7 @@ function Game() {
   const overTime = elapsed / 1000 > TIER_TARGET_MS[tier] / 1000;
   const isGuest  = !user;
 
-  // Session/review screens replace the main game
+  // Full-screen replacements for the main game
   if (activeSessionConfig) {
     return (
       <PracticeSession
@@ -266,6 +284,14 @@ function Game() {
   if (showReview) {
     return <ReviewMode onClose={() => setShowReview(false)} />;
   }
+  if (showSimulation) {
+    return <ExamSimulation onExit={() => { setShowSimulation(false); if (user) loadStats(); }} />;
+  }
+  if (showLearn) {
+    return <LearnMode onClose={() => setShowLearn(false)} />;
+  }
+
+  const anyOverlayOpen = (showAuth && !user) || showOnboarding || showSessionModal;
 
   return (
     <>
@@ -283,16 +309,16 @@ function Game() {
       {/* Board is inert while any overlay is open */}
       <div
         className="wrap"
-        {...((showAuth && !user) || showOnboarding ? { inert: '', 'aria-hidden': 'true' } : {})}
+        {...(anyOverlayOpen ? { inert: '', 'aria-hidden': 'true' } : {})}
       >
-        {/* Stats above puzzle */}
+        {!isGuest && <Dashboard stats={stats} onPracticeWeakness={startWeaknessPractice} />}
+
         <Stats
           stats={stats}
           history={history}
           isGuest={isGuest}
           guestAttempts={guestAttempts}
           onSignUpNudge={() => setShowAuth(true)}
-          onPracticeWeakness={startWeaknessPractice}
         />
 
         <header className="masthead">
@@ -373,7 +399,7 @@ function Game() {
 
         <div className="controls">
           <button className="btn" onClick={showHint} disabled={!puzzle || loading}>Hint</button>
-          <button className="btn" onClick={reveal} disabled={answered || !puzzle || loading}>Reveal</button>
+          <button className="btn btn-muted" onClick={reveal} disabled={answered || !puzzle || loading}>Reveal</button>
           <button className="btn" onClick={() => setShowReview(true)} disabled={loading || isGuest} title={isGuest ? 'Sign in to review missed puzzles' : ''}>Review</button>
           <button
             className="btn primary"
@@ -384,13 +410,19 @@ function Game() {
           </button>
         </div>
 
-        {user && (
-          <div className="controls" style={{ marginTop: '-14px' }}>
-            <button className="btn" onClick={() => setShowSessionModal(true)} disabled={loading}>
-              Practice Session
-            </button>
-          </div>
-        )}
+        <div className="controls" style={{ marginTop: '-14px' }}>
+          <button className="btn" onClick={() => setShowLearn(true)}>How to Solve</button>
+          {user && (
+            <>
+              <button className="btn" onClick={() => setShowSessionModal(true)} disabled={loading}>
+                Practice Session
+              </button>
+              <button className="btn" onClick={() => setShowSimulation(true)} disabled={loading}>
+                Full Exam Simulation
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </>
   );
