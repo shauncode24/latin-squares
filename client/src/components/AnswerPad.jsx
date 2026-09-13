@@ -39,7 +39,7 @@ export default function AnswerPad({ onSelect, disabled, selected, correctLetter 
           );
         })}
       </div>
-      <p className="answer-hint">Tap an option, or press A–E / 1–5.</p>
+      <p className="answer-hint">Tap an option, press A–E / 1–5, or press Enter for Next.</p>
     </>
   );
 }

@@ -120,12 +120,13 @@ router.get('/history', async (req, res) => {
   }
 });
 
-// GET /api/stats/timeseries?bucket=daily|weekly
+// GET /api/stats/timeseries?bucket=hourly|daily
 router.get('/timeseries', async (req, res) => {
   try {
     if (!req.userId) return res.json({ series: [] });
-    const bucket = req.query.bucket === 'weekly' ? 'weekly' : 'daily';
-    const since = new Date(Date.now() - (bucket === 'weekly' ? 84 : 30) * 86400000);
+    const bucket = req.query.bucket === 'hourly' ? 'hourly' : 'daily';
+    const hours = bucket === 'hourly' ? 48 : 720;
+    const since = new Date(Date.now() - hours * 3600000);
     const attempts = await Attempt.find({ userId: req.userId, createdAt: { $gte: since } })
       .select('correct elapsedMs createdAt')
       .lean();
@@ -134,10 +135,12 @@ router.get('/timeseries', async (req, res) => {
     for (const a of attempts) {
       const d = new Date(a.createdAt);
       let key;
-      if (bucket === 'weekly') {
-        const weekStart = new Date(d);
-        weekStart.setDate(d.getDate() - d.getDay());
-        key = weekStart.toISOString().slice(0, 10);
+      if (bucket === 'hourly') {
+        const yr = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const dy = String(d.getDate()).padStart(2, '0');
+        const hr = String(d.getHours()).padStart(2, '0');
+        key = `${yr}-${mo}-${dy} ${hr}:00`;
       } else {
         key = d.toISOString().slice(0, 10);
       }
@@ -152,7 +155,8 @@ router.get('/timeseries', async (req, res) => {
         date: g.date,
         solved: g.solved,
         correct: g.correct,
-        avgTimeMs: g.times.length ? Math.round(g.times.reduce((s, t) => s + t, 0) / g.times.length) : null,
+        accuracy: g.solved ? Math.round((100 * g.correct) / g.solved) : 0,
+        avgTimeSec: g.times.length ? Number((g.times.reduce((s, t) => s + t, 0) / (g.times.length * 1000)).toFixed(1)) : null,
       }));
 
     res.json({ series });
@@ -204,19 +208,20 @@ router.get('/weakest', async (req, res) => {
   }
 });
 
-// NEW: GET /api/stats/trend — this week vs last week, for the Dashboard's
-// trend arrows ("vs. last week").
+// GET /api/stats/trend — this day vs yesterday, for the Dashboard's trend arrows
 router.get('/trend', async (req, res) => {
   try {
     if (!req.userId) return res.json({ trend: null });
-    const now = Date.now();
-    const weekMs = 7 * 86400000;
-    const [thisWeek, lastWeek] = await Promise.all([
-      Attempt.find({ userId: req.userId, createdAt: { $gte: new Date(now - weekMs) } }).lean(),
-      Attempt.find({ userId: req.userId, createdAt: { $gte: new Date(now - 2 * weekMs), $lt: new Date(now - weekMs) } }).lean(),
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+
+    const [thisDay, prevDay] = await Promise.all([
+      Attempt.find({ userId: req.userId, createdAt: { $gte: startOfToday } }).lean(),
+      Attempt.find({ userId: req.userId, createdAt: { $gte: startOfYesterday, $lt: startOfToday } }).lean(),
     ]);
-    const cur = summarize(thisWeek);
-    const prev = summarize(lastWeek);
+    const cur = summarize(thisDay);
+    const prev = summarize(prevDay);
     res.json({
       trend: {
         current: cur,

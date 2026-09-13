@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import Grid from './Grid';
 import AnswerPad from './AnswerPad';
+import { Icon } from './icons';
 
 const TOTAL_QUESTIONS = 25;
 const TOTAL_TIME_MS = 25 * 60 * 1000;
@@ -53,6 +54,21 @@ export default function ExamSimulation({ onExit }) {
     return () => clearInterval(clockRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Enter') {
+        if (summary) {
+          onExit();
+        } else if (answered) {
+          e.preventDefault();
+          next();
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [answered, summary, qIndex, sessionId, onExit]);
 
   function tick() {
     const remaining = TOTAL_TIME_MS - (performance.now() - clockStartRef.current);
@@ -112,52 +128,83 @@ export default function ExamSimulation({ onExit }) {
       ? Math.round((100 * prevRun.summary.correct) / prevRun.summary.attempted)
       : null;
     return (
-      <div className="session-summary">
-        <h2>Simulation Complete</h2>
-        <div className="summary-stats">
-          <div className="stat"><div className="num">{summary.correct}/{summary.attempted}</div><div className="label">correct</div></div>
-          <div className="stat"><div className="num">{acc}%</div><div className="label">accuracy</div></div>
-          <div className="stat"><div className="num">{Math.round((summary.avgTimeMs || 0) / 1000)}s</div><div className="label">avg time</div></div>
-          <div className="stat"><div className="num">{Math.round((TOTAL_TIME_MS - remainingMs) / 60000)}m</div><div className="label">time used</div></div>
+      <div className="session-summary-card">
+        <div className="summary-hero-icon">⏱️</div>
+        <h2>Exam Simulation Complete</h2>
+        <div className="summary-stats-grid">
+          <div className="stat-card">
+            <div className="stat-card-val">{summary.correct}/{summary.attempted}</div>
+            <div className="stat-card-lbl">Correct Answers</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-val">{acc}%</div>
+            <div className="stat-card-lbl">Overall Accuracy</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-val">{Math.round((summary.avgTimeMs || 0) / 1000)}s</div>
+            <div className="stat-card-lbl">Average Speed</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-val">{Math.round((TOTAL_TIME_MS - remainingMs) / 60000)}m</div>
+            <div className="stat-card-lbl">Total Time Used</div>
+          </div>
         </div>
         {prevAcc != null && (
-          <p className="summary-note">
+          <p className="summary-note-text">
             Last run: {prevRun.summary.correct}/{prevRun.summary.attempted} ({prevAcc}%)
             {' — '}{acc >= prevAcc ? 'improved or held steady' : 'lower than last time'}
           </p>
         )}
-        <button className="btn primary" onClick={onExit}>Back</button>
+        <button className="btn primary btn-lg" onClick={onExit}>
+          <Icon.ArrowLeft /> Back to Dashboard
+        </button>
       </div>
     );
   }
 
-  const overTime = remainingMs < TOTAL_TIME_MS * 0.1;
+  const isOvertime = remainingMs < TOTAL_TIME_MS * 0.1;
   const mins = Math.floor(remainingMs / 60000);
   const secs = Math.floor((remainingMs % 60000) / 1000).toString().padStart(2, '0');
 
   return (
-    <div className="session-wrap">
-      <div className="session-header">
-        <div className="session-progress-label">Question {qIndex + 1} of {deck.length}</div>
-        <div className="session-progress-bar">
-          <div className="session-progress-fill" style={{ width: `${(qIndex / deck.length) * 100}%` }} />
+    <div className="session-container">
+      <div className="session-nav-bar">
+        <button className="btn-back-pill" onClick={() => { clearInterval(clockRef.current); onExit(); }}>
+          <Icon.ArrowLeft />
+          <span>Back to Dashboard</span>
+        </button>
+
+        <div className="session-progress-meta">
+          <span className="session-q-pill">Question {qIndex + 1} of {deck.length}</span>
+          <span className="session-tier-tag tier-simulation">EXAM SIMULATION</span>
+          <div className={`session-live-timer ${isOvertime ? 'is-overtime' : ''}`}>
+            <Icon.Clock />
+            <span>{mins}:{secs}</span>
+          </div>
         </div>
-        <span className={`time${overTime ? ' over' : ''}`} style={{ fontFamily: 'var(--mono)' }}>{mins}:{secs}</span>
-        <button className="btn-link" onClick={() => { clearInterval(clockRef.current); onExit(); }}>← Exit</button>
       </div>
 
-      {puzzle && !loading ? (
-        <Grid cols={puzzle.cols} cells={puzzle.cells} target={puzzle.target} pivotCells={[]} revealedLetter={null} answered={false} allLetters={puzzle.allLetters} />
-      ) : (
-        <div className="loading">Loading…</div>
-      )}
+      <div className="session-progress-track">
+        <div className="session-progress-fill" style={{ width: `${((qIndex + 1) / deck.length) * 100}%` }} />
+      </div>
 
-      <AnswerPad onSelect={handleSelect} disabled={answered || loading || !puzzle} selected={selected} correctLetter={null} />
+      <div className="session-main-card">
+        {puzzle && !loading ? (
+          <Grid cols={puzzle.cols} cells={puzzle.cells} target={puzzle.target} pivotCells={[]} revealedLetter={null} answered={false} allLetters={puzzle.allLetters} />
+        ) : (
+          <div className="session-loading-state">
+            <div className="spinner" />
+            <span>Loading exam question...</span>
+          </div>
+        )}
 
-      <div className="controls">
-        <button className="btn primary" onClick={next} disabled={!answered}>
-          {qIndex + 1 >= deck.length ? 'Finish' : 'Next →'}
-        </button>
+        <AnswerPad onSelect={handleSelect} disabled={answered || loading || !puzzle} selected={selected} correctLetter={null} />
+
+        <div className="session-footer-actions">
+          <button className="btn primary btn-next-q" onClick={next} disabled={!answered}>
+            {qIndex + 1 >= deck.length ? 'Finish Exam ★' : 'Next Question →'}
+          </button>
+        </div>
       </div>
     </div>
   );

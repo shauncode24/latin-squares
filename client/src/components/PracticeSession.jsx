@@ -4,6 +4,7 @@ import { useSession } from '../SessionContext';
 import { timeStr } from '../lib/format';
 import Grid from './Grid';
 import AnswerPad from './AnswerPad';
+import { Icon } from './icons';
 
 const TIERS = ['low', 'medium', 'high'];
 const TIER_TARGET_MS = { low: 20000, medium: 50000, high: 75000 };
@@ -37,6 +38,21 @@ export default function PracticeSession({ config, onExit }) {
     })();
     return () => clearInterval(tickRef.current);
   }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Enter') {
+        if (summary) {
+          onExit();
+        } else if (answered) {
+          e.preventDefault();
+          next();
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [answered, summary, questionNum, sessionId, onExit]);
 
   async function loadNextPuzzle(sid, qNum) {
     if (qNum >= questionCount) {
@@ -78,9 +94,6 @@ export default function PracticeSession({ config, onExit }) {
     setAnswered(true);
     recordAttempt({ correct: res.correct, hintUsed, elapsedMs, solveQuality: res.solveQuality });
 
-    // NEW: automatically surface the deduction chain on a wrong or
-    // slow answer, even in practice mode without a hint request —
-    // this is the actual teaching moment, not just "here's the letter."
     if (!isExam && !res.correct) {
       setPivotCells(res.pivotCells || []);
     }
@@ -121,63 +134,114 @@ export default function PracticeSession({ config, onExit }) {
   if (summary) {
     const acc = summary.attempted ? Math.round((100 * summary.correct) / summary.attempted) : 0;
     return (
-      <div className="session-summary">
-        <h2>Session Complete</h2>
-        <div className="summary-stats">
-          <div className="stat"><div className="num">{summary.correct}/{summary.attempted}</div><div className="label">correct</div></div>
-          <div className="stat"><div className="num">{acc}%</div><div className="label">accuracy</div></div>
-          <div className="stat"><div className="num">{timeStr(summary.avgTimeMs)}</div><div className="label">avg time</div></div>
-          <div className="stat"><div className="num">{summary.streak}</div><div className="label">best run this session</div></div>
+      <div className="session-summary-card">
+        <div className="summary-hero-icon">🏆</div>
+        <h2>Practice Session Complete</h2>
+        <div className="summary-stats-grid">
+          <div className="stat-card">
+            <div className="stat-card-val">{summary.correct}/{summary.attempted}</div>
+            <div className="stat-card-lbl">Correct Answers</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-val">{acc}%</div>
+            <div className="stat-card-lbl">Accuracy Rate</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-val">{timeStr(summary.avgTimeMs)}</div>
+            <div className="stat-card-lbl">Average Speed</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-val">{summary.streak}</div>
+            <div className="stat-card-lbl">Best Run Streak</div>
+          </div>
         </div>
-        {summary.hinted > 0 && <p className="summary-note">{summary.hinted} hint{summary.hinted > 1 ? 's' : ''} used</p>}
-        <button className="btn primary" onClick={onExit}>Back to practice</button>
+        {summary.hinted > 0 && <p className="summary-note-text">💡 {summary.hinted} hint{summary.hinted > 1 ? 's' : ''} requested during this drill</p>}
+        <button className="btn primary btn-lg" onClick={onExit}>
+          <Icon.ArrowLeft /> Back to Dashboard
+        </button>
       </div>
     );
   }
 
+  const isOvertime = elapsed / 1000 > (TIER_TARGET_MS[puzzle?.difficulty || 'low'] / 1000);
+
   return (
-    <div className="session-wrap">
-      <div className="session-header">
-        <div className="session-progress-label">
-          Question {questionNum + 1} of {questionCount}
+    <div className="session-container">
+      {/* Header bar with Back button & session stats */}
+      <div className="session-nav-bar">
+        <button className="btn-back-pill" onClick={onExit}>
+          <Icon.ArrowLeft />
+          <span>Back to Dashboard</span>
+        </button>
+
+        <div className="session-progress-meta">
+          <span className="session-q-pill">Question {questionNum + 1} of {questionCount}</span>
+          {puzzle && (
+            <span className={`session-tier-tag tier-${puzzle.difficulty}`}>
+              {puzzle.difficulty.toUpperCase()}
+            </span>
+          )}
         </div>
-        <div className="session-progress-bar">
-          <div className="session-progress-fill" style={{ width: `${(questionNum / questionCount) * 100}%` }} />
-        </div>
-        <button className="btn-link" onClick={onExit}>← Exit</button>
       </div>
 
-      {puzzle && !loading ? (
-        <Grid
-          cols={puzzle.cols}
-          cells={puzzle.cells}
-          target={puzzle.target}
-          pivotCells={pivotCells}
-          revealedLetter={correctLetter}
-          answered={answered}
-          allLetters={puzzle.allLetters}
+      {/* Progress Bar */}
+      <div className="session-progress-track">
+        <div
+          className="session-progress-fill"
+          style={{ width: `${((questionNum + 1) / questionCount) * 100}%` }}
         />
-      ) : (
-        <div className="loading">Loading…</div>
-      )}
+      </div>
 
-      <AnswerPad onSelect={handleSelect} disabled={answered || loading || !puzzle} selected={selected} correctLetter={correctLetter} />
-
-      {!isExam && <div className="feedback">{feedback || '\u00a0'}</div>}
-
-      <div className="controls">
-        {!isExam && (
-          <button className="btn" onClick={handleHint} disabled={answered || !puzzle || loading}>Hint</button>
-        )}
-        {answered ? (
-          <button className="btn primary" onClick={next}>
-            {questionNum + 1 >= questionCount ? 'Finish' : 'Next →'}
-          </button>
+      {/* Practice Question Card */}
+      <div className="session-main-card">
+        {puzzle && !loading ? (
+          <Grid
+            cols={puzzle.cols}
+            cells={puzzle.cells}
+            target={puzzle.target}
+            pivotCells={pivotCells}
+            revealedLetter={correctLetter}
+            answered={answered}
+            allLetters={puzzle.allLetters}
+          />
         ) : (
-          <span className={`time${elapsed / 1000 > (TIER_TARGET_MS[puzzle?.difficulty || 'low'] / 1000) ? ' over' : ''}`}>
-            {(elapsed / 1000).toFixed(1)}s
-          </span>
+          <div className="session-loading-state">
+            <div className="spinner" />
+            <span>Loading deduction grid...</span>
+          </div>
         )}
+
+        <AnswerPad
+          onSelect={handleSelect}
+          disabled={answered || loading || !puzzle}
+          selected={selected}
+          correctLetter={correctLetter}
+        />
+
+        {!isExam && (
+          <div className={`session-feedback-box ${feedback.startsWith('Correct') ? 'is-correct' : feedback ? 'is-wrong' : ''}`}>
+            {feedback || '\u00a0'}
+          </div>
+        )}
+
+        <div className="session-footer-actions">
+          {!isExam && (
+            <button className="btn btn-hint" onClick={handleHint} disabled={answered || !puzzle || loading}>
+              <Icon.Bulb /> Hint
+            </button>
+          )}
+
+          {answered ? (
+            <button className="btn primary btn-next-q" onClick={next}>
+              {questionNum + 1 >= questionCount ? 'Finish Session ★' : 'Next Question →'}
+            </button>
+          ) : (
+            <div className={`session-live-timer ${isOvertime ? 'is-overtime' : ''}`}>
+              <Icon.Clock />
+              <span>{(elapsed / 1000).toFixed(1)}s</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Grid from './Grid';
 import AnswerPad from './AnswerPad';
 import { Icon } from './icons';
@@ -27,6 +28,19 @@ export default function NormalPractice({
   onLearn,
   onNewGrid,
 }) {
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Enter') {
+        if (!loading && (answered || puzzle)) {
+          e.preventDefault();
+          onNewGrid();
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loading, answered, puzzle, onNewGrid]);
+
   return (
     <div className="drill-container">
       <aside className="drill-sidebar-left">
