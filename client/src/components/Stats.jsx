@@ -26,30 +26,24 @@ const METRIC_TABS = [
 const TIER_TARGETS_SEC = { low: 20, medium: 50, high: 75 };
 const MIN_PX_PER_POINT = 56;
 
-// ─── Date formatter ──────────────────────────────────────────────────────────
 function fmtDate(iso, view) {
   if (!iso) return '';
   if (view === 'daily') {
-    // iso: "2026-09-13"
     const d = new Date(iso + 'T00:00:00');
     return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
-  // hourly: "2026-09-13 14:15"
-  const time = iso.slice(11, 16); // "14:15"
+  const time = iso.slice(11, 16);
   if (iso.slice(11, 13) === '00' && iso.slice(14, 16) === '00') {
-    // midnight → show date
     const d = new Date(iso.replace(' ', 'T') + ':00');
     if (!isNaN(d.getTime())) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
   return time;
 }
 
-// ─── Custom Tooltip ──────────────────────────────────────────────────────────
 function BarTooltip({ active, payload, label, metric, diffFilter, view }) {
   if (!active || !payload?.length) return null;
   const mt = METRIC_TABS.find(t => t.key === metric);
   const unit = mt?.unit || '';
-  const suffix = mt?.suffix || '_solved';
 
   const barEntries = payload.filter(p => p.dataKey !== '_trend' && p.value != null && p.value !== 0);
   const trendEntry = payload.find(p => p.dataKey === '_trend');
@@ -77,8 +71,6 @@ function BarTooltip({ active, payload, label, metric, diffFilter, view }) {
   );
 }
 
-
-// ─── PerformanceChart ─────────────────────────────────────────────────────────
 function PerformanceChart({ byTier, pbs }) {
   const [data,       setData]       = useState(null);
   const [view,       setView]       = useState('hourly');
@@ -89,7 +81,6 @@ function PerformanceChart({ byTier, pbs }) {
   const scrollRef                   = useRef(null);
   const [containerW, setContainerW] = useState(700);
 
-  // Mouse drag-to-scroll
   const isDragging = useRef(false);
   const startX = useRef(0);
   const scrollLeftStart = useRef(0);
@@ -102,7 +93,6 @@ function PerformanceChart({ byTier, pbs }) {
     return () => ro.disconnect();
   }, []);
 
-  // Convert vertical mouse wheel into horizontal scroll
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -136,7 +126,6 @@ function PerformanceChart({ byTier, pbs }) {
   const chartW      = Math.max(containerW, chartData.length * MIN_PX_PER_POINT);
   const needsScroll = chartW > containerW + 8;
 
-  // Auto-scroll to end (most recent data point) when new data loads
   useEffect(() => {
     if (!loading && chartData.length > 0 && scrollRef.current) {
       const timer = setTimeout(() => {
@@ -148,7 +137,6 @@ function PerformanceChart({ byTier, pbs }) {
     }
   }, [loading, chartData.length, view, interval]);
 
-  // Drag handlers
   const handleMouseDown = (e) => {
     const el = scrollRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
@@ -177,12 +165,9 @@ function PerformanceChart({ byTier, pbs }) {
     }
   };
 
-
-  // Bars to show
   const activeTiers = diffFilter === 'all' ? TIERS : [diffFilter];
   const barSize     = diffFilter === 'all' ? 10 : 16;
 
-  // Speed vs Target section
   const tierSpeedData = TIERS.map(t => {
     const d = byTier[t];
     const avgSec  = d?.avgTimeMs ? Math.round(d.avgTimeMs / 100) / 10 : null;
@@ -193,10 +178,7 @@ function PerformanceChart({ byTier, pbs }) {
 
   return (
     <div className="perf-chart-section">
-      {/* ── Main chart card ── */}
       <div className="stats-card chart-card">
-
-        {/* Title */}
         <div className="chart-card-header">
           <div>
             <h3 className="chart-card-title">Activity Timeline</h3>
@@ -204,10 +186,7 @@ function PerformanceChart({ byTier, pbs }) {
           </div>
         </div>
 
-        {/* ── Filter row ── */}
         <div className="chart-filter-row">
-
-          {/* View */}
           <div className="chart-filter-group">
             <div className="chart-seg-group">
               <button className={`chart-seg-btn${view === 'hourly' ? ' active' : ''}`} onClick={() => setView('hourly')}>Hourly</button>
@@ -215,7 +194,6 @@ function PerformanceChart({ byTier, pbs }) {
             </div>
           </div>
 
-          {/* Interval: only when view=hourly */}
           {view === 'hourly' && (
             <div className="chart-filter-group">
               <div className="chart-seg-group">
@@ -230,7 +208,6 @@ function PerformanceChart({ byTier, pbs }) {
             </div>
           )}
 
-          {/* Difficulty */}
           <div className="chart-filter-group">
             <div className="chart-seg-group">
               {[{k:'all',l:'All'},{k:'low',l:'Low'},{k:'medium',l:'Med'},{k:'high',l:'High'}].map(d => (
@@ -243,7 +220,6 @@ function PerformanceChart({ byTier, pbs }) {
             </div>
           </div>
 
-          {/* Metric */}
           <div className="chart-filter-group">
             <div className="chart-seg-group">
               {METRIC_TABS.map(tab => (
@@ -257,8 +233,6 @@ function PerformanceChart({ byTier, pbs }) {
           </div>
         </div>
 
-
-        {/* Scrollable chart */}
         <div
           className="chart-scroll-outer"
           ref={scrollRef}
@@ -277,9 +251,7 @@ function PerformanceChart({ byTier, pbs }) {
               <div className="chart-scroll-inner" style={{ width: chartW }}>
                 <ResponsiveContainer width="100%" height={290}>
                   <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: -2, bottom: 0 }} barCategoryGap="30%">
-
                     <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.07)" />
-
                     <XAxis
                       dataKey="date"
                       tick={{ fontSize: 11, fill: '#9ca3af' }}
@@ -289,7 +261,6 @@ function PerformanceChart({ byTier, pbs }) {
                       padding={{ left: 16, right: 16 }}
                       interval={Math.max(0, Math.ceil(chartData.length / 12) - 1)}
                     />
-
                     <YAxis
                       tick={{ fontSize: 11, fill: '#9ca3af' }}
                       axisLine={false}
@@ -299,10 +270,7 @@ function PerformanceChart({ byTier, pbs }) {
                       width={40}
                       allowDecimals={metric !== 'solved'}
                     />
-
                     <Tooltip content={<BarTooltip metric={metric} diffFilter={diffFilter} view={view} />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
-
-                    {/* Grouped bars */}
                     {activeTiers.map(tier => (
                       <Bar
                         key={tier}
@@ -314,12 +282,10 @@ function PerformanceChart({ byTier, pbs }) {
                         opacity={0.85}
                       />
                     ))}
-
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
 
-              {/* Legend */}
               <div className="chart-bar-legend">
                 {activeTiers.map(t => (
                   <span key={t} className="chart-legend-item">
@@ -333,7 +299,6 @@ function PerformanceChart({ byTier, pbs }) {
         </div>
       </div>
 
-      {/* Speed vs Target card */}
       <div className="stats-card speed-target-card">
         <div className="card-header-simple">
           <h3>Speed vs. Target Time</h3>
@@ -366,14 +331,12 @@ function PerformanceChart({ byTier, pbs }) {
                   </div>
                 </div>
                 <div className="speed-bar-track">
-                  {/* Actual avg time bar */}
                   {avgSec != null && (
                     <div
                       className={`speed-bar-fill ${underTarget ? 'fill-good' : 'fill-bad'}`}
                       style={{ width: `${barPct}%` }}
                     />
                   )}
-                  {/* Target marker */}
                   <div className="speed-target-marker" style={{ left: `${targetPct}%` }} />
                 </div>
                 <div className="speed-track-labels">
@@ -392,6 +355,7 @@ function PerformanceChart({ byTier, pbs }) {
 export default function Stats({ stats, history, isGuest, guestAttempts, onSignUpNudge }) {
   const overall = stats && stats.overall;
   const byTier  = (stats && stats.byTier) || {};
+  const byPattern = (stats && stats.byPattern) || {}; // NEW
   const streaks  = stats && stats.streaks;
   const pbs      = (stats && stats.personalBests) || {};
   const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
@@ -435,10 +399,12 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
   }
 
   const visibleHistory = history ? history.slice(0, historyShown) : [];
+  const patternEntries = Object.entries(byPattern)
+    .filter(([, d]) => d.solved > 0)
+    .sort((a, b) => b[1].solved - a[1].solved);
 
   return (
     <div className="stats-dashboard">
-      {/* Top Header Metrics Row */}
       <div className="stats-hero-grid">
         <div className="hero-stat-card">
           <div className="stat-card-icon bg-blue">
@@ -485,12 +451,9 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
         </div>
       </div>
 
-      {/* Main Chart Section */}
       <PerformanceChart byTier={byTier} pbs={pbs} />
 
-      {/* Bottom Grid: Tier Breakdown + Recent History */}
       <div className="stats-bottom-grid">
-        {/* Tier Mastery Section */}
         <div className="stats-card">
           <div className="card-header-simple">
             <h3>Mastery by Difficulty</h3>
@@ -520,6 +483,7 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
                       <span>Accuracy: <strong>{acc}%</strong></span>
                       <span>Best Clean: <strong>{pbs[t] ? timeStr(pbs[t]) : '-'}</strong></span>
                       <span>Hints: <strong>{d.hinted || 0}</strong></span>
+                      <span>Consistency: <strong>{d.consistencyMs != null ? `±${timeStr(d.consistencyMs)}` : '-'}</strong></span>
                     </div>
                   )}
                 </div>
@@ -528,7 +492,39 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
           </div>
         </div>
 
-        {/* Recent Attempts History */}
+        {/* NEW: Pattern Breakdown — surfaces the pivot-distance / pattern-tag
+            sub-axis longitudinally, using byPattern which was already
+            computed server-side but never rendered until now. */}
+        {patternEntries.length > 0 && (
+          <div className="stats-card">
+            <div className="card-header-simple">
+              <h3>Pattern Breakdown</h3>
+            </div>
+            <div className="tier-breakdown-list">
+              {patternEntries.map(([pattern, d]) => (
+                <div key={pattern} className="tier-breakdown-item">
+                  <div className="tier-item-head">
+                    <div className="tier-item-title">
+                      <span className="tier-tag" style={{ background: '#f3f4f6', color: 'var(--ink)' }}>
+                        {pattern.replace(/-/g, ' ')}
+                      </span>
+                      <span className="tier-item-solved">{d.correct}/{d.solved} solved</span>
+                    </div>
+                    <span className="tier-item-time">Avg {timeStr(d.avgTimeMs)}</span>
+                  </div>
+                  <div className="tier-progress-bar-bg">
+                    <div className="tier-progress-bar-fill" style={{ width: `${d.accuracy || 0}%`, background: '#6366f1' }} />
+                  </div>
+                  <div className="tier-item-meta">
+                    <span>Accuracy: <strong>{d.accuracy}%</strong></span>
+                    <span>Consistency: <strong>{d.consistencyMs != null ? `±${timeStr(d.consistencyMs)}` : '-'}</strong></span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="stats-card">
           <div className="card-header-simple">
             <h3>Recent Attempts</h3>

@@ -48,24 +48,28 @@ export const api = {
   submitAnswer: (puzzleId, letter, elapsedMs = 0, hintUsed = false, sessionId = null) =>
     request('POST', `/api/puzzles/${puzzleId}/answer`, { letter, elapsedMs, hintUsed, sessionId }),
   revealAnswer: (puzzleId) => request('GET', `/api/puzzles/${puzzleId}/reveal`),
-  getHint: (puzzleId) => request('GET', `/api/puzzles/${puzzleId}/hint`),
+  getHint: (puzzleId, round = 0) => request('GET', `/api/puzzles/${puzzleId}/hint?round=${round}`), // CHANGED
 
   getStats:      () => request('GET', '/api/stats'),
   getHistory:    () => request('GET', '/api/stats/history'),
   getTimeseries: (view = 'hourly', interval = '1hr') =>
     request('GET', `/api/stats/timeseries?view=${view}&interval=${interval}`),
   getWeakest:    () => request('GET', '/api/stats/weakest'),
-  getTrend:      () => request('GET', '/api/stats/trend'), // NEW
+  getTrend:      () => request('GET', '/api/stats/trend'),
 
   createSession:   (mode, difficulty, questionCount) =>
     request('POST',  '/api/sessions', { mode, difficulty, questionCount }),
   getSession:      (sessionId) => request('GET',   `/api/sessions/${sessionId}`),
   completeSession: (sessionId) => request('PATCH', `/api/sessions/${sessionId}/complete`),
-  getSimulationHistory: () => request('GET', '/api/sessions/simulations/history'), // NEW
+  getSimulationHistory: () => request('GET', '/api/sessions/simulations/history'),
 
   getMissed: () => request('GET', '/api/review/missed'),
 
   getDueItems:  () => request('GET',  '/api/sr/due'),
   submitReview: (difficulty, rounds, pivotDistance, correct, hintUsed) =>
     request('POST', '/api/sr/review', { difficulty, rounds, pivotDistance, correct, hintUsed }),
+
+  // NEW: AI coaching — thin narration layer, both on-demand only.
+  getAiDiagnosis: (diagnosis) => request('POST', '/api/coach/diagnosis', { diagnosis }),
+  getAiStrategy:  () => request('GET', '/api/coach/strategy'),
 };

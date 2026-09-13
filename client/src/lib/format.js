@@ -18,3 +18,16 @@ export function relTime(dateStr) {
   if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
   return Math.floor(diff / 86400000) + 'd ago';
 }
+
+/**
+ * NEW: labels how far the deduction pivot sits from the target cell.
+ * `pivotDistance` was already computed and returned by the generator for
+ * every puzzle — this just makes it a visible sub-difficulty signal
+ * instead of buried data.
+ */
+export function pivotLabel(distance) {
+  if (distance == null) return null;
+  if (distance <= 1) return 'Adjacent pivot';
+  if (distance <= 3) return 'Nearby pivot';
+  return 'Distant pivot';
+}

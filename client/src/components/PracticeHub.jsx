@@ -3,7 +3,7 @@ import { Icon } from './icons';
 import { TIERS } from '../lib/constants';
 import DueReviews from './DueReviews';
 
-export default function PracticeHub({ user, onStartSession, onStartSimulation, onReview, onLearn, onAuth }) {
+export default function PracticeHub({ user, onStartSession, onStartSimulation, onReview, onLearn, onAuth, onGuided, onRapidFire }) {
   const [mode, setMode] = useState('practice');
   const [difficulty, setDifficulty] = useState('low');
   const [count, setCount] = useState(10);
@@ -94,7 +94,7 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
             <div>
               <h3 className="hub-card-title">Full Exam Simulation</h3>
               <p className="hub-card-desc">
-                Strict 25-minute test conditions with 25 mixed puzzles matching real test distribution.
+                Strict 25-minute test conditions with 25 mixed puzzles matching real test distribution. Skip and flag questions to return to later, just like the real exam.
               </p>
             </div>
           </div>
@@ -125,7 +125,43 @@ export default function PracticeHub({ user, onStartSession, onStartSimulation, o
           </div>
         </div>
 
-        {/* Card 3: Review & Learn */}
+        {/* Card 3: Guided Practice — NEW */}
+        <div className="hub-card">
+          <div className="hub-card-header">
+            <div className="hub-card-icon"><Icon.Lightbulb /></div>
+            <div>
+              <h3 className="hub-card-title">Guided Practice</h3>
+              <p className="hub-card-desc">
+                Untimed. Reveal the deduction chain one step at a time before you commit to an answer — a bridge between watching and solving alone.
+              </p>
+            </div>
+          </div>
+          <div className="hub-card-footer">
+            <button className="btn primary" style={{ width: '100%' }} onClick={onGuided}>
+              Start Guided Practice →
+            </button>
+          </div>
+        </div>
+
+        {/* Card 4: Rapid-Fire Drill — NEW */}
+        <div className="hub-card">
+          <div className="hub-card-header">
+            <div className="hub-card-icon"><Icon.Zap /></div>
+            <div>
+              <h3 className="hub-card-title">Rapid-Fire Drill</h3>
+              <p className="hub-card-desc">
+                No hints, no review, no "Next" click. Puzzles chain back-to-back for a fixed window — pure automaticity training.
+              </p>
+            </div>
+          </div>
+          <div className="hub-card-footer">
+            <button className="btn primary" style={{ width: '100%' }} onClick={onRapidFire}>
+              Start Drill →
+            </button>
+          </div>
+        </div>
+
+        {/* Card 5: Review & Learn */}
         <div className="hub-card">
           <div className="hub-card-header">
             <div className="hub-card-icon"><Icon.Book /></div>

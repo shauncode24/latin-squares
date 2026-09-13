@@ -17,7 +17,7 @@ export default function AnswerPad({ onSelect, disabled, selected, correctLetter 
   }, [disabled, onSelect]);
 
   return (
-    <>
+    <div className="answer-pad-container">
       <div className="answers">
         {LETTERS.map((letter, i) => {
           const classNames = ['answer-btn'];
@@ -40,6 +40,6 @@ export default function AnswerPad({ onSelect, disabled, selected, correctLetter 
         })}
       </div>
       <p className="answer-hint">Tap an option, press A–E / 1–5, or press Enter for Next.</p>
-    </>
+    </div>
   );
 }

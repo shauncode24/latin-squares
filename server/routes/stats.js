@@ -14,6 +14,16 @@ function median(nums) {
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 }
 
+// NEW: standard deviation of solve times — used as a "consistency" signal.
+// Two students can share the same average time but very different reliability;
+// avg/median alone can't distinguish them.
+function stddev(nums) {
+  if (!nums.length) return null;
+  const mean = nums.reduce((s, n) => s + n, 0) / nums.length;
+  const variance = nums.reduce((s, n) => s + (n - mean) ** 2, 0) / nums.length;
+  return Math.round(Math.sqrt(variance));
+}
+
 function summarize(attempts) {
   const solved = attempts.length;
   const correct = attempts.filter((a) => a.correct).length;
@@ -24,6 +34,7 @@ function summarize(attempts) {
     accuracy: solved ? Math.round((100 * correct) / solved) : null,
     avgTimeMs: times.length ? Math.round(times.reduce((s, t) => s + t, 0) / times.length) : null,
     medianTimeMs: median(times),
+    consistencyMs: times.length ? stddev(times) : null, // NEW
     fastestMs: times.length ? Math.min(...times) : null,
     slowestMs: times.length ? Math.max(...times) : null,
     hinted: attempts.filter((a) => a.hintUsed).length,
@@ -47,10 +58,66 @@ function computeMastery(byTier) {
   return mastery;
 }
 
+// NEW: turns raw solveQuality/patternTag data into plain-language mistake
+// diagnosis instead of leaving it as unread badges in Review Mode.
+// Deterministic — no AI needed, this is a straightforward aggregation.
+function computeDiagnosis(all) {
+  const buckets = {};
+  for (const a of all) {
+    const key = `${a.difficulty}:${a.patternTag || 'direct'}`;
+    if (!buckets[key]) {
+      buckets[key] = {
+        difficulty: a.difficulty,
+        patternTag: a.patternTag || 'direct',
+        total: 0, correct: 0, rushed: 0, cleanWrong: 0, hinted: 0,
+      };
+    }
+    const b = buckets[key];
+    b.total++;
+    if (a.correct) b.correct++;
+    if (!a.correct) {
+      if (a.solveQuality === 'rushed') b.rushed++;
+      else if (a.solveQuality === 'clean') b.cleanWrong++;
+    }
+    if (a.solveQuality === 'hinted') b.hinted++;
+  }
+
+  const MIN_SAMPLE = 5;
+  const messages = [];
+  for (const b of Object.values(buckets)) {
+    if (b.total < MIN_SAMPLE) continue;
+    const accuracy = Math.round((100 * b.correct) / b.total);
+    if (accuracy >= 85) continue; // not weak enough to flag
+
+    const wrongTotal = b.total - b.correct;
+    if (wrongTotal === 0) continue;
+
+    const rushedShare = b.rushed / wrongTotal;
+    const cleanWrongShare = b.cleanWrong / wrongTotal;
+    const hintedShare = b.hinted / b.total;
+
+    let message;
+    if (rushedShare >= 0.5) {
+      message = `At ${b.difficulty} / ${b.patternTag}, most mistakes come from answering too fast (${Math.round(rushedShare * 100)}% of misses were rushed). Finish the elimination before picking a letter.`;
+    } else if (cleanWrongShare >= 0.5) {
+      message = `At ${b.difficulty} / ${b.patternTag}, you're taking your time but still landing wrong (${Math.round(cleanWrongShare * 100)}% of misses were careful attempts). This looks like a technique gap on this pattern, not a speed problem.`;
+    } else if (hintedShare >= 0.4) {
+      message = `At ${b.difficulty} / ${b.patternTag}, you're leaning on hints often (${Math.round(hintedShare * 100)}% of attempts). Try a few unaided first.`;
+    } else {
+      message = `At ${b.difficulty} / ${b.patternTag}, accuracy is ${accuracy}% over ${b.total} attempts — worth targeted practice.`;
+    }
+
+    messages.push({ difficulty: b.difficulty, patternTag: b.patternTag, accuracy, sampleSize: b.total, message });
+  }
+
+  messages.sort((a, b) => a.accuracy - b.accuracy); // worst first
+  return messages.slice(0, 5);
+}
+
 // GET /api/stats
 router.get('/', async (req, res) => {
   try {
-    if (!req.userId) return res.json({ overall: null, byTier: {}, byPattern: {}, streaks: null, personalBests: {}, mastery: {} });
+    if (!req.userId) return res.json({ overall: null, byTier: {}, byPattern: {}, streaks: null, personalBests: {}, mastery: {}, diagnosis: [] });
 
     const all = await Attempt.find({ userId: req.userId }).lean();
     const overall = summarize(all);
@@ -97,6 +164,7 @@ router.get('/', async (req, res) => {
       streaks: { current, best },
       personalBests: cleanByTier,
       mastery: computeMastery(byTier),
+      diagnosis: computeDiagnosis(all), // NEW
     });
   } catch (err) {
     console.error(err);
@@ -133,7 +201,6 @@ router.get('/timeseries', async (req, res) => {
     let bucketMs, numBuckets, dateKeyFn;
 
     if (view === 'daily') {
-      // Day-level buckets, 30 days
       bucketMs = 24 * 3600000;
       numBuckets = 30;
       dateKeyFn = (ts) => {
@@ -141,16 +208,15 @@ router.get('/timeseries', async (req, res) => {
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       };
     } else {
-      // Sub-hour buckets
       if (interval === '15min') {
         bucketMs = 15 * 60000;
-        numBuckets = 96; // 24 hours
+        numBuckets = 96;
       } else if (interval === '30min') {
         bucketMs = 30 * 60000;
-        numBuckets = 96; // 48 hours
+        numBuckets = 96;
       } else {
         bucketMs = 60 * 60000;
-        numBuckets = 72; // 3 days
+        numBuckets = 72;
       }
       dateKeyFn = (ts) => {
         const d = new Date(ts);
@@ -163,7 +229,6 @@ router.get('/timeseries', async (req, res) => {
     const currentBucketTs = Math.floor(now / bucketMs) * bucketMs;
     const startBucketTs = currentBucketTs - (numBuckets - 1) * bucketMs;
 
-    // Pre-populate all continuous buckets
     const groups = {};
     for (let ts = startBucketTs; ts <= currentBucketTs; ts += bucketMs) {
       const key = dateKeyFn(ts);

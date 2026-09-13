@@ -10,6 +10,8 @@ import LearnMode from './components/LearnMode';
 import PracticeSession from './components/PracticeSession';
 import ExamSimulation from './components/ExamSimulation';
 import ReviewMode from './components/ReviewMode';
+import GuidedPractice from './components/GuidedPractice';
+import RapidFire from './components/RapidFire';
 import Masthead from './components/Masthead';
 import NavTabs from './components/NavTabs';
 import NormalPractice from './components/NormalPractice';
@@ -29,17 +31,21 @@ function Game() {
   const [showReview, setShowReview]   = useState(false);
   const [showLearn, setShowLearn]     = useState(false);
   const [showSimulation, setShowSimulation] = useState(false);
-  const [activeTab, setActiveTab]     = useState('normal'); // 'normal' | 'practice-mode' | 'stats'
+  const [showGuided, setShowGuided]   = useState(false); // NEW
+  const [showRapidFire, setShowRapidFire] = useState(false); // NEW
+  const [activeTab, setActiveTab]     = useState('normal');
 
   const [tier, setTier]       = useState('low');
   const [puzzle, setPuzzle]   = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+  const [untimed, setUntimed] = useState(false);
 
   const [selected, setSelected]           = useState(null);
   const [correctLetter, setCorrectLetter] = useState(null);
   const [feedback, setFeedback]           = useState('');
   const [pivotCells, setPivotCells]       = useState([]);
+  const [explanation, setExplanation]     = useState(null); // NEW
 
   const [elapsed, setElapsed] = useState(0);
   const startRef    = useRef(null);
@@ -80,6 +86,7 @@ function Game() {
     setError('');
     setSelected(null);
     setCorrectLetter(null);
+    setExplanation(null);
     answeredRef.current = false;
     hintUsedRef.current = false;
     setFeedback('');
@@ -115,6 +122,7 @@ function Game() {
     setError('');
     setSelected(null);
     setCorrectLetter(null);
+    setExplanation(null);
     answeredRef.current = false;
     hintUsedRef.current = false;
     setFeedback('');
@@ -157,6 +165,7 @@ function Game() {
     try {
       const res = await api.submitAnswer(puzzle.puzzleId, letter, elapsedMs, hintUsedRef.current, null);
       setCorrectLetter(res.correctLetter);
+      setExplanation(res.explanation || null);
 
       if (!res.correct) {
         setPivotCells(res.pivotCells || []);
@@ -184,8 +193,9 @@ function Game() {
     clearInterval(tickRef.current);
     answeredRef.current = true;
     try {
-      const { correctLetter: answer } = await api.revealAnswer(puzzle.puzzleId);
+      const { correctLetter: answer, explanation: exp } = await api.revealAnswer(puzzle.puzzleId);
       setCorrectLetter(answer);
+      setExplanation(exp || null);
       setFeedback(`Answer: ${answer}`);
     } catch (err) {
       setError(err.message || 'Could not reveal the answer.');
@@ -210,7 +220,7 @@ function Game() {
   function handleGuest()   { setGuestMode(true); setShowAuth(false); }
   function handleAuthSuccess() { setShowAuth(false); setGuestMode(false); }
 
-  const overTime = elapsed / 1000 > TIER_TARGET_MS[tier] / 1000;
+  const overTime = !untimed && elapsed / 1000 > TIER_TARGET_MS[tier] / 1000;
   const isGuest  = !user;
 
   if (activeSessionConfig) {
@@ -228,7 +238,19 @@ function Game() {
     return <ExamSimulation onExit={() => { setShowSimulation(false); if (user) loadStats(); }} />;
   }
   if (showLearn) {
-    return <LearnMode onClose={() => setShowLearn(false)} />;
+    return (
+      <LearnMode
+        onClose={() => setShowLearn(false)}
+        onStartPractice={() => { setShowLearn(false); setActiveTab('normal'); }}
+        onStartGuided={() => { setShowLearn(false); setShowGuided(true); }}
+      />
+    );
+  }
+  if (showGuided) {
+    return <GuidedPractice onClose={() => { setShowGuided(false); if (user) loadStats(); }} />;
+  }
+  if (showRapidFire) {
+    return <RapidFire onExit={() => { setShowRapidFire(false); if (user) loadStats(); }} />;
   }
 
   const anyOverlayOpen = (showAuth && !user) || showOnboarding || showSessionModal;
@@ -263,7 +285,6 @@ function Game() {
           onChange={(tab) => { setActiveTab(tab); if (tab === 'stats' && user) loadStats(); }}
         />
 
-        {/* Tab 1: Normal Practice */}
         {activeTab === 'normal' && (
           <NormalPractice
             tier={tier}
@@ -288,10 +309,12 @@ function Game() {
             onReview={() => setShowReview(true)}
             onLearn={() => setShowLearn(true)}
             onNewGrid={() => weaknessConfig ? newWeaknessPuzzle() : newPuzzle(tier)}
+            untimed={untimed}
+            onToggleUntimed={() => setUntimed((v) => !v)}
+            explanation={explanation}
           />
         )}
 
-        {/* Tab 2: Practice Mode */}
         {activeTab === 'practice-mode' && (
           <PracticeHub
             user={user}
@@ -300,10 +323,11 @@ function Game() {
             onReview={() => setShowReview(true)}
             onLearn={() => setShowLearn(true)}
             onAuth={() => setShowAuth(true)}
+            onGuided={() => setShowGuided(true)}
+            onRapidFire={() => setShowRapidFire(true)}
           />
         )}
 
-        {/* Tab 3: Stats */}
         {activeTab === 'stats' && (
           <div className="stats-tab-content">
             {!isGuest && (

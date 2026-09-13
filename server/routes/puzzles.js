@@ -4,6 +4,7 @@ const { getUserId } = require('../middleware/auth');
 const Puzzle  = require('../models/Puzzle');
 const Attempt = require('../models/Attempt');
 const { generatePuzzle, generateTargetedPuzzle, LETTERS, COLS, TIER_ROUNDS } = require('../lib/generator');
+const { explainPuzzle } = require('../lib/explainer');
 
 const TIERS = ['low', 'medium', 'high'];
 const GUESS_THRESHOLD_MS = 1_500;
@@ -59,11 +60,7 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// NEW: POST /api/puzzles/practice-similar
-// Given a previous rounds/pivotDistance profile (from a missed Attempt, or
-// from Weakness Mode's computed weak bucket), generate a fresh puzzle with
-// the same structural profile — this is what makes Review Mode and
-// Weakness Mode actually functional instead of decorative.
+// POST /api/puzzles/practice-similar
 router.post('/practice-similar', async (req, res) => {
   try {
     const { rounds, pivotDistance, difficulty } = req.body;
@@ -101,12 +98,6 @@ router.post('/:id/answer', async (req, res) => {
     const elapsed = Number(elapsedMs) || 0;
     const isFast = elapsed < GUESS_THRESHOLD_MS;
 
-    // FIX: previously a fast WRONG answer fell through to 'clean', which
-    // mislabeled rushed guesses as careful reasoning in the stats. Now:
-    //   hint used         -> 'hinted'   (regardless of speed)
-    //   fast + correct     -> 'guessed'  (still worth flagging as unverified)
-    //   fast + wrong        -> 'rushed'   (NEW category — distinct mistake type)
-    //   otherwise           -> 'clean'
     let solveQuality;
     if (hintUsed) {
       solveQuality = 'hinted';
@@ -118,15 +109,17 @@ router.post('/:id/answer', async (req, res) => {
       solveQuality = 'clean';
     }
 
-    if (userId) {
-      const cells = puzzle.grid.map((row, r) =>
-        row.map((v, c) => {
-          if (r === puzzle.target.row && c === puzzle.target.col) return null;
-          return puzzle.mask[r][c] ? LETTERS[v] : null;
-        })
-      );
-      const allLetters = puzzle.grid.map((row) => row.map((v) => LETTERS[v]));
+    // Computed unconditionally now — needed for the explanation regardless
+    // of whether this attempt gets logged (guests get explanations too).
+    const cells = puzzle.grid.map((row, r) =>
+      row.map((v, c) => {
+        if (r === puzzle.target.row && c === puzzle.target.col) return null;
+        return puzzle.mask[r][c] ? LETTERS[v] : null;
+      })
+    );
+    const allLetters = puzzle.grid.map((row) => row.map((v) => LETTERS[v]));
 
+    if (userId) {
       await Attempt.create({
         userId,
         sessionId: sessionId || null,
@@ -152,9 +145,10 @@ router.post('/:id/answer', async (req, res) => {
 
     await Puzzle.updateOne({ _id: puzzle._id }, { $set: { answeredAt: new Date() } });
 
-    // Return the pivot chain too, so the client can show the deduction
-    // path automatically on any wrong (or slow) answer, not only when the
-    // user pre-emptively asked for a hint.
+    const explanation = explainPuzzle({
+      cells, allLetters, target: puzzle.target, path: puzzle.path, cols: COLS,
+    });
+
     res.json({
       correct,
       correctLetter,
@@ -163,6 +157,7 @@ router.post('/:id/answer', async (req, res) => {
       pivotCells: puzzle.path && puzzle.path.length ? puzzle.path[0] : [],
       rounds: puzzle.rounds,
       pivotDistance: puzzle.pivotDistance,
+      explanation, // NEW: deterministic step-by-step walkthrough
     });
   } catch (err) {
     console.error(err);
@@ -181,15 +176,15 @@ router.get('/:id/reveal', async (req, res) => {
 
     const correctLetter = LETTERS[puzzle.grid[puzzle.target.row][puzzle.target.col]];
 
-    if (userId) {
-      const cells = puzzle.grid.map((row, r) =>
-        row.map((v, c) => {
-          if (r === puzzle.target.row && c === puzzle.target.col) return null;
-          return puzzle.mask[r][c] ? LETTERS[v] : null;
-        })
-      );
-      const allLetters = puzzle.grid.map((row) => row.map((v) => LETTERS[v]));
+    const cells = puzzle.grid.map((row, r) =>
+      row.map((v, c) => {
+        if (r === puzzle.target.row && c === puzzle.target.col) return null;
+        return puzzle.mask[r][c] ? LETTERS[v] : null;
+      })
+    );
+    const allLetters = puzzle.grid.map((row) => row.map((v) => LETTERS[v]));
 
+    if (userId) {
       await Attempt.create({
         userId,
         difficulty: puzzle.difficulty,
@@ -207,14 +202,21 @@ router.get('/:id/reveal', async (req, res) => {
     }
 
     await Puzzle.updateOne({ _id: puzzle._id }, { $set: { answeredAt: new Date() } });
-    res.json({ correctLetter });
+
+    const explanation = explainPuzzle({
+      cells, allLetters, target: puzzle.target, path: puzzle.path, cols: COLS,
+    });
+
+    res.json({ correctLetter, explanation }); // NEW: explanation
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to reveal answer' });
   }
 });
 
-// GET /api/puzzles/:id/hint
+// GET /api/puzzles/:id/hint?round=n
+// Supports revealing the deduction chain one round at a time (used by
+// Guided Practice) instead of only the first pivot round.
 router.get('/:id/hint', async (req, res) => {
   try {
     const puzzle = await Puzzle.findOne({ _id: req.params.id, answeredAt: null });
@@ -224,8 +226,18 @@ router.get('/:id/hint', async (req, res) => {
     if (!puzzle.hintUsed) {
       await Puzzle.updateOne({ _id: puzzle._id }, { $set: { hintUsed: true } });
     }
-    const firstRound = puzzle.path && puzzle.path.length ? puzzle.path[0] : [];
-    res.json({ pivotCells: firstRound, direct: firstRound.length === 0 });
+    const roundIdx = Math.max(0, parseInt(req.query.round, 10) || 0);
+    const rounds = puzzle.path || [];
+    const round = rounds[roundIdx] || [];
+    const hasMore = roundIdx + 1 < rounds.length;
+
+    res.json({
+      pivotCells: round,
+      direct: rounds.length === 0,
+      roundIndex: roundIdx,
+      totalRounds: rounds.length,
+      hasMore,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to fetch hint' });

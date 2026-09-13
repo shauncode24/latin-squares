@@ -7,7 +7,6 @@ import { Icon } from './icons';
 const TOTAL_QUESTIONS = 25;
 const TOTAL_TIME_MS = 25 * 60 * 1000;
 
-// Roughly mirrors the real test's distribution across difficulty tiers.
 const DISTRIBUTION = [
   ...Array(10).fill('low'),
   ...Array(9).fill('medium'),
@@ -25,8 +24,9 @@ function shuffleDeck(arr) {
 
 export default function ExamSimulation({ onExit }) {
   const [sessionId, setSessionId] = useState(null);
-  const [deck] = useState(() => shuffleDeck(DISTRIBUTION).slice(0, TOTAL_QUESTIONS));
-  const [qIndex, setQIndex] = useState(0);
+  const [order] = useState(() => shuffleDeck(DISTRIBUTION).slice(0, TOTAL_QUESTIONS)); // tier per slot, fixed
+  const [status, setStatus] = useState(() => new Array(TOTAL_QUESTIONS).fill('unseen')); // 'unseen' | 'flagged' | 'answered'
+  const [queue, setQueue] = useState(() => order.map((_, i) => i)); // traversal order of slot indices
   const [puzzle, setPuzzle] = useState(null);
   const [selected, setSelected] = useState(null);
   const [answered, setAnswered] = useState(false);
@@ -40,6 +40,10 @@ export default function ExamSimulation({ onExit }) {
   const qStartRef = useRef(null);
   const finishingRef = useRef(false);
 
+  const currentSlot = queue[0];
+  const answeredCount = status.filter((s) => s === 'answered').length;
+  const flaggedCount = status.filter((s) => s === 'flagged').length;
+
   useEffect(() => {
     (async () => {
       const [sess] = await Promise.all([
@@ -49,7 +53,7 @@ export default function ExamSimulation({ onExit }) {
       setSessionId(sess.sessionId);
       clockStartRef.current = performance.now();
       clockRef.current = setInterval(tick, 250);
-      await loadQuestion(0);
+      await loadSlot(order[0]);
     })();
     return () => clearInterval(clockRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,13 +66,14 @@ export default function ExamSimulation({ onExit }) {
           onExit();
         } else if (answered) {
           e.preventDefault();
-          next();
+          advance();
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [answered, summary, qIndex, sessionId, onExit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answered, summary, queue, sessionId, onExit]);
 
   function tick() {
     const remaining = TOTAL_TIME_MS - (performance.now() - clockStartRef.current);
@@ -80,13 +85,12 @@ export default function ExamSimulation({ onExit }) {
     }
   }
 
-  async function loadQuestion(i) {
-    if (i >= deck.length) { finish(); return; }
+  async function loadSlot(slotTier) {
     setLoading(true);
     setAnswered(false);
     setSelected(null);
     try {
-      const data = await api.generatePuzzle(deck[i]);
+      const data = await api.generatePuzzle(slotTier);
       setPuzzle(data);
       qStartRef.current = performance.now();
     } finally {
@@ -95,19 +99,45 @@ export default function ExamSimulation({ onExit }) {
   }
 
   async function handleSelect(letter) {
-    if (answered || !puzzle) return;
+    if (answered || !puzzle || currentSlot == null) return;
     setAnswered(true);
     setSelected(letter);
     const elapsedMs = Math.round(performance.now() - qStartRef.current);
     try {
       await api.submitAnswer(puzzle.puzzleId, letter, elapsedMs, false, sessionId);
     } catch { /* keep the run going even if grading briefly fails */ }
+    setStatus((prev) => {
+      const next = prev.slice();
+      next[currentSlot] = 'answered';
+      return next;
+    });
   }
 
-  async function next() {
-    const nextI = qIndex + 1;
-    setQIndex(nextI);
-    await loadQuestion(nextI);
+  // Real-exam triage: leave this question, come back to it later. It's
+  // requeued at the back rather than remembered exactly — puzzles here are
+  // single-use and freshly generated, so returning to a flagged slot means
+  // a new puzzle of the same difficulty, not the identical grid.
+  async function skipCurrent() {
+    if (currentSlot == null || answered || queue.length <= 1) return;
+    const slotToRequeue = currentSlot;
+    const nextQueue = [...queue.slice(1), slotToRequeue];
+    setStatus((prev) => {
+      const next = prev.slice();
+      if (next[slotToRequeue] === 'unseen') next[slotToRequeue] = 'flagged';
+      return next;
+    });
+    setQueue(nextQueue);
+    await loadSlot(order[nextQueue[0]]);
+  }
+
+  async function advance() {
+    const restOfQueue = queue.slice(1);
+    setQueue(restOfQueue);
+    if (restOfQueue.length === 0) {
+      finish();
+      return;
+    }
+    await loadSlot(order[restOfQueue[0]]);
   }
 
   async function finish() {
@@ -127,6 +157,12 @@ export default function ExamSimulation({ onExit }) {
     const prevAcc = prevRun && prevRun.summary.attempted
       ? Math.round((100 * prevRun.summary.correct) / prevRun.summary.attempted)
       : null;
+
+    const fh = summary.firstHalf;
+    const sh = summary.secondHalf;
+    const hasPacing = fh && sh && (fh.accuracy != null || sh.accuracy != null);
+    const fatigueDrop = hasPacing && fh.accuracy != null && sh.accuracy != null && sh.accuracy < fh.accuracy - 10;
+
     return (
       <div className="session-summary-card">
         <div className="summary-hero-icon">⏱️</div>
@@ -149,6 +185,16 @@ export default function ExamSimulation({ onExit }) {
             <div className="stat-card-lbl">Total Time Used</div>
           </div>
         </div>
+
+        {hasPacing && (
+          <p className="summary-note-text">
+            First half: {fh.accuracy ?? '-'}% accuracy, {fh.avgTimeMs ? Math.round(fh.avgTimeMs / 1000) + 's' : '-'} avg
+            {' · '}
+            Second half: {sh.accuracy ?? '-'}% accuracy, {sh.avgTimeMs ? Math.round(sh.avgTimeMs / 1000) + 's' : '-'} avg
+            {fatigueDrop && <><br />Accuracy dropped notably in the back half — a sign of fatigue or time pressure late in the run.</>}
+          </p>
+        )}
+
         {prevAcc != null && (
           <p className="summary-note-text">
             Last run: {prevRun.summary.correct}/{prevRun.summary.attempted} ({prevAcc}%)
@@ -165,6 +211,7 @@ export default function ExamSimulation({ onExit }) {
   const isOvertime = remainingMs < TOTAL_TIME_MS * 0.1;
   const mins = Math.floor(remainingMs / 60000);
   const secs = Math.floor((remainingMs % 60000) / 1000).toString().padStart(2, '0');
+  const isLast = queue.length <= 1;
 
   return (
     <div className="session-container">
@@ -175,7 +222,12 @@ export default function ExamSimulation({ onExit }) {
         </button>
 
         <div className="session-progress-meta">
-          <span className="session-q-pill">Question {qIndex + 1} of {deck.length}</span>
+          <span className="session-q-pill">{answeredCount} of {TOTAL_QUESTIONS} answered</span>
+          {flaggedCount > 0 && (
+            <span className="session-q-pill" style={{ background: '#fef3c7', color: '#92400e' }}>
+              🚩 {flaggedCount} flagged
+            </span>
+          )}
           <span className="session-tier-tag tier-simulation">EXAM SIMULATION</span>
           <div className={`session-live-timer ${isOvertime ? 'is-overtime' : ''}`}>
             <Icon.Clock />
@@ -185,7 +237,7 @@ export default function ExamSimulation({ onExit }) {
       </div>
 
       <div className="session-progress-track">
-        <div className="session-progress-fill" style={{ width: `${((qIndex + 1) / deck.length) * 100}%` }} />
+        <div className="session-progress-fill" style={{ width: `${(answeredCount / TOTAL_QUESTIONS) * 100}%` }} />
       </div>
 
       <div className="session-main-card">
@@ -201,8 +253,13 @@ export default function ExamSimulation({ onExit }) {
         <AnswerPad onSelect={handleSelect} disabled={answered || loading || !puzzle} selected={selected} correctLetter={null} />
 
         <div className="session-footer-actions">
-          <button className="btn primary btn-next-q" onClick={next} disabled={!answered}>
-            {qIndex + 1 >= deck.length ? 'Finish Exam ★' : 'Next Question →'}
+          {!answered && (
+            <button className="btn" onClick={skipCurrent} disabled={loading || isLast}>
+              Skip — come back later
+            </button>
+          )}
+          <button className="btn primary btn-next-q" onClick={advance} disabled={!answered}>
+            {isLast ? 'Finish Exam ★' : 'Next Question →'}
           </button>
         </div>
       </div>

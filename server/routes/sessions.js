@@ -73,6 +73,19 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// NEW: split an ordered attempt list into first/second half accuracy + speed,
+// so an exam-style run can show whether performance degraded under pressure
+// late in the run — not just an overall average.
+function halfStats(arr) {
+  if (!arr.length) return { accuracy: null, avgTimeMs: null };
+  const correct = arr.filter((a) => a.correct).length;
+  const times = arr.map((a) => a.elapsedMs).filter((t) => t > 0);
+  return {
+    accuracy: Math.round((100 * correct) / arr.length),
+    avgTimeMs: times.length ? Math.round(times.reduce((s, t) => s + t, 0) / times.length) : null,
+  };
+}
+
 // PATCH /api/sessions/:id/complete
 router.patch('/:id/complete', requireAuth, async (req, res) => {
   try {
@@ -102,13 +115,15 @@ router.patch('/:id/complete', requireAuth, async (req, res) => {
       if (a.correct) byTier[a.difficulty].correct++;
     }
 
-    session.summary = { attempted, correct, hinted, revealed, avgTimeMs, streak, byTier };
+    // NEW: pacing breakdown — first half vs second half of the run.
+    const mid = Math.ceil(attempts.length / 2);
+    const firstHalf = halfStats(attempts.slice(0, mid));
+    const secondHalf = halfStats(attempts.slice(mid));
+
+    session.summary = { attempted, correct, hinted, revealed, avgTimeMs, streak, byTier, firstHalf, secondHalf };
     session.completedAt = new Date();
     await session.save();
 
-    // Feed every attempt from this session into the spaced-repetition
-    // scheduler too, so session-based practice (not just ad-hoc /api/sr/review
-    // calls from Review/Weakness mode) builds real review history.
     for (const a of attempts) {
       const patternKey = `${a.difficulty}:${a.rounds}:${pivotBucket(a.pivotDistance)}`;
       let record = await SpacedRepetition.findOne({ userId: req.userId, patternKey });

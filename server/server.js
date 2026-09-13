@@ -10,6 +10,7 @@ const statsRoutes   = require('./routes/stats');
 const sessionRoutes = require('./routes/sessions');
 const reviewRoutes  = require('./routes/review');
 const srRoutes      = require('./routes/spaced-repetition');
+const coachRoutes   = require('./routes/coach'); // NEW
 
 const app = express();
 app.use(cors({
@@ -26,6 +27,7 @@ app.use('/api/stats',    statsRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/review',   reviewRoutes);
 app.use('/api/sr',       srRoutes);
+app.use('/api/coach',    coachRoutes); // NEW
 
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/dmat';

@@ -3,6 +3,7 @@ import Grid from './Grid';
 import AnswerPad from './AnswerPad';
 import { Icon } from './icons';
 import { TIERS, TIER_LABEL, TIER_DESC, TIER_TARGET_LABEL } from '../lib/constants';
+import { pivotLabel } from '../lib/format';
 
 export default function NormalPractice({
   tier,
@@ -27,6 +28,9 @@ export default function NormalPractice({
   onReview,
   onLearn,
   onNewGrid,
+  untimed,
+  onToggleUntimed,
+  explanation,
 }) {
   useEffect(() => {
     function handleKeyDown(e) {
@@ -61,8 +65,25 @@ export default function NormalPractice({
       <main className="drill-center">
         <div className="status-row">
           <span>Target: {TIER_TARGET_LABEL[tier]}</span>
-          <span className={`time${overTime ? ' over' : ''}`}>{(elapsed / 1000).toFixed(1)}s</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={!!untimed} onChange={onToggleUntimed} />
+              Untimed
+            </label>
+            {!untimed && (
+              <span className={`time${overTime ? ' over' : ''}`}>{(elapsed / 1000).toFixed(1)}s</span>
+            )}
+          </div>
         </div>
+
+        {/* Pivot-distance & pattern info */}
+        {puzzle && puzzle.rounds > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-soft)', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>
+              {(puzzle.patternTag || '').replace(/-/g, ' ')} · {pivotLabel(puzzle.pivotDistance)}
+            </span>
+          </div>
+        )}
 
         {error && <div className="error">{error}</div>}
 
@@ -105,6 +126,16 @@ export default function NormalPractice({
         <div className={`feedback${feedback.startsWith('Correct') ? ' correct-text' : ''}${feedback.startsWith('Not quite') ? ' wrong-text' : ''}`}>
           {feedback || '\u00a0'}
         </div>
+
+        {/* Deterministic step-by-step walkthrough after a wrong answer */}
+        {answered && explanation && explanation.length > 0 && (
+          <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', background: '#fafafa', border: '1px solid var(--line)', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+            <strong style={{ color: 'var(--ink)', fontSize: 12 }}>How to solve it:</strong>
+            <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              {explanation.map((step, i) => <li key={i} style={{ marginBottom: 3 }}>{step}</li>)}
+            </ol>
+          </div>
+        )}
       </main>
 
       <aside className="drill-sidebar-right">
