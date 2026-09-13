@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis,
+  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { api } from '../api';
@@ -10,70 +10,73 @@ const TIERS = ['low', 'medium', 'high'];
 const TIER_LABEL = { low: 'Low', medium: 'Med', high: 'High' };
 const HISTORY_PAGE = 10;
 
+function shortDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function TimeseriesChart() {
   const [data, setData] = useState(null);
   const [bucket, setBucket] = useState('daily');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   const load = useCallback((b) => {
     api.getTimeseries(b)
-      .then((res) => setData(res.series))
+      .then((res) => setData(res.series.map((s) => ({
+        ...s,
+        accuracy: s.solved ? Math.round((100 * s.correct) / s.solved) : 0,
+      }))))
       .catch(() => setData([]));
   }, []);
 
-  function toggle() {
-    if (!open && !data) load(bucket);
-    setOpen((v) => !v);
-  }
+  useEffect(() => { load(bucket); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function switchBucket(b) {
-    setBucket(b);
-    setData(null);
-    load(b);
-  }
+  function toggle() { setOpen((v) => !v); }
+  function switchBucket(b) { setBucket(b); setData(null); load(b); }
 
   return (
     <div className="timeseries-section">
-      <button className="stats-section-title timeseries-toggle" onClick={toggle}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, width: '100%' }}>
-        Progress over time {open ? '\u25b2' : '\u25bc'}
+      <button className="stats-collapsible-header" onClick={toggle}>
+        <span>Progress over time</span>
+        <span>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <>
-          <div className="timeseries-bucket-row" style={{ display: 'flex', gap: '6px', margin: '8px 0' }}>
+          <div className="seg-row">
             {['daily', 'weekly'].map((b) => (
-              <button key={b}
-                style={{ padding: '4px 10px', fontSize: '11px', fontFamily: 'inherit',
-                  border: '1px solid', borderColor: bucket === b ? 'var(--accent)' : 'var(--line)',
-                  background: bucket === b ? 'var(--accent-soft)' : 'var(--panel)',
-                  color: bucket === b ? 'var(--accent)' : 'var(--ink-soft)',
-                  borderRadius: '3px', cursor: 'pointer' }}
-                onClick={() => switchBucket(b)}>
-                {b === 'daily' ? 'Last 30 days' : 'Last 12 weeks'}
+              <button
+                key={b}
+                className={`seg-btn${bucket === b ? ' active' : ''}`}
+                onClick={() => switchBucket(b)}
+              >
+                {b === 'daily' ? 'Daily' : 'Weekly'}
               </button>
             ))}
           </div>
           {!data ? (
             <div style={{ padding: '20px 0', color: 'var(--ink-soft)', fontSize: '13px' }}>Loading...</div>
           ) : data.length === 0 ? (
-            <p className="stats-empty">No data yet.</p>
+            <p className="stats-empty-body">No data yet.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
-                <YAxis tick={{ fontSize: 10 }} />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={shortDate} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} allowDecimals={false} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} domain={[0, 100]} tickFormatter={(v) => v + '%'} />
                 <Tooltip
                   formatter={(val, name) => [
-                    name === 'avgTimeMs' ? timeStr(val) : val,
-                    name === 'avgTimeMs' ? 'Avg time' : name,
+                    name === 'accuracy' ? val + '%' : val,
+                    name === 'accuracy' ? 'Accuracy' : name === 'solved' ? 'Solved' : 'Correct',
                   ]}
                   labelStyle={{ fontSize: 11 }}
-                  contentStyle={{ fontSize: 12 }} />
+                  contentStyle={{ fontSize: 12 }}
+                />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="solved"  stroke="#8a9190" dot={false} name="Solved" />
-                <Line type="monotone" dataKey="correct" stroke="#1f6f5c" dot={false} name="Correct" />
-              </LineChart>
+                <Bar yAxisId="left" dataKey="solved" fill="#111827" name="Solved" radius={[3, 3, 0, 0]} />
+                <Bar yAxisId="left" dataKey="correct" fill="#14b8a6" name="Correct" radius={[3, 3, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="accuracy" stroke="#f97316" strokeWidth={2} dot={false} name="Accuracy" />
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </>
@@ -112,85 +115,71 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
     );
   }
 
+  if (!overall || overall.solved === 0) {
+    return (
+      <div className="stats-panel">
+        <div className="stats-empty-card">
+          <p className="stats-empty-title">No attempts logged yet</p>
+          <p className="stats-empty-body">
+            Solve your first grid and your accuracy, timings, streak and
+            per-tier breakdown will build up here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const visibleHistory = history ? history.slice(0, historyShown) : [];
+  const pbSummary = TIERS.filter((t) => pbs[t] != null)
+    .map((t) => `${TIER_LABEL[t][0]} ${timeStr(pbs[t])}`)
+    .join(', ') || '-';
 
   return (
     <div className="stats-panel">
-      {streaks && (streaks.current > 0 || streaks.best > 0) && (
-        <div className="streaks-row">
-          <span className="streak-chip">{'🔥'} {streaks.current} day practice streak</span>
-          {streaks.best > streaks.current && (
-            <span className="streak-best">Best: {streaks.best}</span>
-          )}
-        </div>
-      )}
-
-      <div className="stats-summary">
-        <div className="stat">
-          <div className="num">{(overall && overall.solved) || 0}</div>
-          <div className="label">solved</div>
-        </div>
-        <div className="stat">
-          <div className="num">{overall && overall.accuracy != null ? overall.accuracy + '%' : '-'}</div>
-          <div className="label">accuracy</div>
-        </div>
-        <div className="stat">
-          <div className="num">{timeStr(overall && overall.avgTimeMs)}</div>
-          <div className="label">avg time</div>
-        </div>
+      <div className="stats-header-row">
+        <h2>Your practice record</h2>
+        {streaks && (streaks.current > 0 || streaks.best > 0) && (
+          <span className="streak-chip">{'🔥'} {streaks.current}-day streak</span>
+        )}
       </div>
 
-      {overall && overall.solved > 0 && (
-        <div className="stats-tier-section">
-          <div className="stats-section-title">Timing detail</div>
-          <div className="pbs-row">
-            <div className="pb-chip"><span>Median</span><span className="pb-time">{timeStr(overall.medianTimeMs)}</span></div>
-            <div className="pb-chip"><span>Fastest</span><span className="pb-time">{timeStr(overall.fastestMs)}</span></div>
-            <div className="pb-chip"><span>Slowest</span><span className="pb-time">{timeStr(overall.slowestMs)}</span></div>
-            <div className="pb-chip"><span>Total practice</span><span className="pb-time">{Math.round((overall.totalPracticeMs || 0) / 60000)}m</span></div>
-          </div>
-        </div>
-      )}
+      <div className="stats-summary-grid">
+        <div className="stat-cell"><div className="label">Solved</div><div className="num">{overall.solved}/{overall.solved}</div></div>
+        <div className="stat-cell"><div className="label">Accuracy</div><div className="num">{overall.accuracy != null ? overall.accuracy + '%' : '-'}</div></div>
+        <div className="stat-cell"><div className="label">Average time</div><div className="num">{timeStr(overall.avgTimeMs)}</div></div>
+        <div className="stat-cell"><div className="label">Median time</div><div className="num">{timeStr(overall.medianTimeMs)}</div></div>
+        <div className="stat-cell"><div className="label">Fastest</div><div className="num">{timeStr(overall.fastestMs)}</div></div>
+        <div className="stat-cell"><div className="label">Slowest</div><div className="num">{timeStr(overall.slowestMs)}</div></div>
+        <div className="stat-cell"><div className="label">Time practising</div><div className="num">{Math.round((overall.totalPracticeMs || 0) / 60000)}m</div></div>
+        <div className="stat-cell"><div className="label">Personal bests</div><div className="num">{pbSummary}</div></div>
+      </div>
 
-      {Object.keys(pbs).length > 0 && (
-        <div className="stats-tier-section">
-          <div className="stats-section-title">Personal bests (fastest clean solve)</div>
-          <div className="pbs-row">
-            {TIERS.map((t) => pbs[t] != null ? (
-              <div key={t} className="pb-chip">
-                <span className={'tier-badge tier-badge-' + t}>{TIER_LABEL[t]}</span>
-                <span className="pb-time">{timeStr(pbs[t])}</span>
+      <div className="stats-tier-section">
+        <div className="stats-section-title">By difficulty</div>
+        <div className="by-tier-list">
+          {TIERS.map((t) => {
+            const d = byTier[t];
+            const hasData = d && d.solved > 0;
+            return (
+              <div key={t} className="by-tier-row">
+                <div className="by-tier-left">
+                  <span className="tier-badge">{t.toUpperCase()}</span>
+                  {hasData ? (
+                    <span className="by-tier-figures">{d.correct}/{d.solved} · {d.accuracy}%</span>
+                  ) : (
+                    <span className="by-tier-empty">No attempts yet</span>
+                  )}
+                </div>
+                {hasData && (
+                  <div className="by-tier-right">
+                    avg {timeStr(d.avgTimeMs)} &nbsp; {d.hinted || 0} hints &nbsp; best clean {timeStr(pbs[t])}
+                  </div>
+                )}
               </div>
-            ) : null)}
-          </div>
+            );
+          })}
         </div>
-      )}
-
-      {overall && overall.solved > 0 && (
-        <div className="stats-tier-section">
-          <div className="stats-section-title">By difficulty</div>
-          <table className="tier-table">
-            <thead>
-              <tr><th>Tier</th><th>Solved</th><th>Accuracy</th><th>Hints</th><th>Avg time</th></tr>
-            </thead>
-            <tbody>
-              {TIERS.map((t) => {
-                const d = byTier[t];
-                if (!d) return null;
-                return (
-                  <tr key={t}>
-                    <td><span className={'tier-badge tier-badge-' + t}>{TIER_LABEL[t]}</span></td>
-                    <td>{d.solved}</td>
-                    <td>{d.accuracy != null ? d.accuracy + '%' : '-'}</td>
-                    <td>{d.hinted || 0}</td>
-                    <td>{timeStr(d.avgTimeMs)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </div>
 
       <TimeseriesChart />
 
@@ -200,7 +189,7 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
           <div className="history-list">
             {visibleHistory.map((a, i) => (
               <div key={i} className={'history-row' + (a.correct ? ' correct' : ' wrong')}>
-                <span className={'tier-badge tier-badge-' + a.difficulty}>{TIER_LABEL[a.difficulty]}</span>
+                <span className="tier-badge">{TIER_LABEL[a.difficulty]}</span>
                 <span className="history-result">{a.correct ? '\u2713' : '\u2717'}</span>
                 <span className="history-time">{timeStr(a.elapsedMs)}</span>
                 {a.hintUsed && <span className="history-hint" title="Hint used">\u2691</span>}
@@ -214,10 +203,6 @@ export default function Stats({ stats, history, isGuest, guestAttempts, onSignUp
             </button>
           )}
         </div>
-      )}
-
-      {(!overall || overall.solved === 0) && (
-        <p className="stats-empty">No attempts yet - solve a puzzle to start tracking!</p>
       )}
     </div>
   );

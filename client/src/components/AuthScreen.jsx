@@ -19,7 +19,6 @@ export default function AuthScreen({ onGuest, onSuccess }) {
       } else {
         await signup(username.trim(), password);
       }
-      // AuthContext updates user → close the auth screen
       onSuccess?.();
     } catch (err) {
       setError(err.message || 'Something went wrong.');
@@ -30,74 +29,78 @@ export default function AuthScreen({ onGuest, onSuccess }) {
 
   return (
     <div className="auth-overlay">
-      <div className="auth-card">
-        <div className="auth-brand">
-          <span className="auth-logo">◈</span>
-          <h2>dMAT Latin Square</h2>
-          <p>Track your performance over time</p>
-        </div>
+      <div className="auth-page-inner">
+        <div className="brand-logo" />
+        <h1 className="auth-brand-title">dMAT Latin Square Drill</h1>
+        <p className="auth-brand-subtitle">
+          Timed 5×5 deduction practice — rows and columns only.
+          Track accuracy, pivot depth and solve speed across three
+          difficulty tiers.
+        </p>
 
-        <div className="auth-tabs">
-          <button
-            className={`auth-tab${tab === 'login' ? ' active' : ''}`}
-            onClick={() => { setTab('login'); setError(''); }}
-          >
-            Log in
+        <div className="auth-card">
+          <div className="auth-tabs">
+            <button
+              className={`auth-tab${tab === 'login' ? ' active' : ''}`}
+              onClick={() => { setTab('login'); setError(''); }}
+            >
+              Log in
+            </button>
+            <button
+              className={`auth-tab${tab === 'signup' ? ' active' : ''}`}
+              onClick={() => { setTab('signup'); setError(''); }}
+            >
+              Sign up
+            </button>
+          </div>
+
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label className="auth-label">
+              Username
+              <input
+                className="auth-input"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                minLength={2}
+                maxLength={30}
+                required
+                placeholder="Enter username"
+                disabled={loading}
+              />
+            </label>
+            <label className="auth-label">
+              Password
+              <input
+                className="auth-input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={tab === 'signup' ? 'new-password' : 'current-password'}
+                minLength={4}
+                required
+                placeholder="Enter password"
+                disabled={loading}
+              />
+            </label>
+
+            {error && <div className="auth-error">{error}</div>}
+
+            <button className="auth-submit" type="submit" disabled={loading}>
+              {loading ? 'Please wait…' : tab === 'login' ? 'Log in' : 'Create account'}
+            </button>
+          </form>
+
+          <div className="auth-divider"><span>or</span></div>
+
+          <button className="auth-guest" onClick={onGuest}>
+            Play as guest
           </button>
-          <button
-            className={`auth-tab${tab === 'signup' ? ' active' : ''}`}
-            onClick={() => { setTab('signup'); setError(''); }}
-          >
-            Sign up
-          </button>
+          <p className="auth-guest-caption">
+            Guest scores aren't saved — no streaks, history or review list.
+          </p>
         </div>
-
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <label className="auth-label">
-            Username
-            <input
-              className="auth-input"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              minLength={2}
-              maxLength={30}
-              required
-              placeholder="Enter username"
-              disabled={loading}
-            />
-          </label>
-          <label className="auth-label">
-            Password
-            <input
-              className="auth-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={tab === 'signup' ? 'new-password' : 'current-password'}
-              minLength={4}
-              required
-              placeholder="Enter password"
-              disabled={loading}
-            />
-          </label>
-
-          {error && <div className="auth-error">{error}</div>}
-
-          <button className="auth-submit" type="submit" disabled={loading}>
-            {loading ? 'Please wait…' : tab === 'login' ? 'Log in' : 'Create account'}
-          </button>
-        </form>
-
-        <div className="auth-divider">
-          <span>or</span>
-        </div>
-
-        <button className="auth-guest" onClick={onGuest}>
-          Play as Guest
-          <span className="auth-guest-note">Scores won't be saved</span>
-        </button>
       </div>
     </div>
   );

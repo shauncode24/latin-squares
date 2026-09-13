@@ -17,25 +17,29 @@ export default function AnswerPad({ onSelect, disabled, selected, correctLetter 
   }, [disabled, onSelect]);
 
   return (
-    <div className="answers">
-      {LETTERS.map((letter) => {
-        const classNames = ['answer-btn'];
-        if (correctLetter) {
-          if (letter === correctLetter) classNames.push('correct');
-          else if (letter === selected) classNames.push('wrong');
-        }
-        return (
-          <button
-            key={letter}
-            className={classNames.join(' ')}
-            disabled={disabled}
-            onClick={() => onSelect(letter)}
-            title={`Press ${letter} or ${LETTERS.indexOf(letter) + 1}`}
-          >
-            {letter}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <div className="answers">
+        {LETTERS.map((letter, i) => {
+          const classNames = ['answer-btn'];
+          if (correctLetter) {
+            if (letter === correctLetter) classNames.push('correct');
+            else if (letter === selected) classNames.push('wrong');
+          }
+          return (
+            <button
+              key={letter}
+              className={classNames.join(' ')}
+              disabled={disabled}
+              onClick={() => onSelect(letter)}
+              title={`Press ${letter} or ${i + 1}`}
+            >
+              <span className="answer-letter">{letter}</span>
+              <span className="answer-num">{i + 1}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="answer-hint">Tap an option, or press A–E / 1–5.</p>
+    </>
   );
 }
