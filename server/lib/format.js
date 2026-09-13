@@ -1,5 +1,5 @@
 /**
- * Shared formatting utilities — used server-side (require) and client-side (import).
+ * Shared formatting utilities  used server-side (require) and client-side (import).
  */
 
 /** Format milliseconds as "12.3s" */

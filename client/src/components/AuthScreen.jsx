@@ -30,7 +30,7 @@ export default function AuthScreen({ onGuest, onSuccess }) {
   return (
     <div className="auth-overlay">
       <div className="auth-page-inner">
-        <div className="brand-logo" />
+        
         <h1 className="auth-brand-title">dMAT Latin Square Drill</h1>
         <p className="auth-brand-subtitle">
           Timed 5×5 deduction practice — rows and columns only.
@@ -39,14 +39,20 @@ export default function AuthScreen({ onGuest, onSuccess }) {
         </p>
 
         <div className="auth-card">
-          <div className="auth-tabs">
+          <div className="auth-tabs" role="tablist">
             <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'login'}
               className={`auth-tab${tab === 'login' ? ' active' : ''}`}
               onClick={() => { setTab('login'); setError(''); }}
             >
               Log in
             </button>
             <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'signup'}
               className={`auth-tab${tab === 'signup' ? ' active' : ''}`}
               onClick={() => { setTab('signup'); setError(''); }}
             >
@@ -56,7 +62,7 @@ export default function AuthScreen({ onGuest, onSuccess }) {
 
           <form className="auth-form" onSubmit={handleSubmit}>
             <label className="auth-label">
-              Username
+              <span>Username</span>
               <input
                 className="auth-input"
                 type="text"
@@ -71,7 +77,7 @@ export default function AuthScreen({ onGuest, onSuccess }) {
               />
             </label>
             <label className="auth-label">
-              Password
+              <span>Password</span>
               <input
                 className="auth-input"
                 type="password"
@@ -85,7 +91,16 @@ export default function AuthScreen({ onGuest, onSuccess }) {
               />
             </label>
 
-            {error && <div className="auth-error">{error}</div>}
+            {error && (
+              <div className="auth-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>{error}</span>
+              </div>
+            )}
 
             <button className="auth-submit" type="submit" disabled={loading}>
               {loading ? 'Please wait…' : tab === 'login' ? 'Log in' : 'Create account'}
@@ -94,7 +109,7 @@ export default function AuthScreen({ onGuest, onSuccess }) {
 
           <div className="auth-divider"><span>or</span></div>
 
-          <button className="auth-guest" onClick={onGuest}>
+          <button className="auth-guest" type="button" onClick={onGuest}>
             Play as guest
           </button>
           <p className="auth-guest-caption">
