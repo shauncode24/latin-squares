@@ -118,7 +118,14 @@ export default function NormalPractice({
 
       <main className="drill-center">
         <div className="status-row">
-          <span>Target: {targetLabel}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span>Target: {targetLabel}</span>
+            {puzzle && puzzle.rounds > 0 && (
+              <span style={{ fontSize: 11, color: 'var(--ink-soft)', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6, fontWeight: 500 }}>
+                {(puzzle.patternTag || '').replace(/-/g, ' ')} · {pivotLabel(puzzle.pivotDistance)}
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', userSelect: 'none' }}>
               <input type="checkbox" checked={!!untimed} onChange={onToggleUntimed} />
@@ -129,14 +136,6 @@ export default function NormalPractice({
             )}
           </div>
         </div>
-
-        {puzzle && puzzle.rounds > 0 && (
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--ink-soft)', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>
-              {(puzzle.patternTag || '').replace(/-/g, ' ')} · {pivotLabel(puzzle.pivotDistance)}
-            </span>
-          </div>
-        )}
 
         {error && <div className="error">{error}</div>}
 
@@ -154,19 +153,15 @@ export default function NormalPractice({
         )}
 
         <div className={`board${answered ? ' answered' : ''}`}>
-          {puzzle && !loading ? (
-            <Grid
-              cols={puzzle.cols}
-              cells={puzzle.cells}
-              target={puzzle.target}
-              pivotCells={pivotCells}
-              revealedLetter={correctLetter}
-              answered={answered}
-              allLetters={puzzle.allLetters}
-            />
-          ) : (
-            <div className="loading">Loading grid…</div>
-          )}
+          <Grid
+            cols={puzzle?.cols}
+            cells={puzzle?.cells}
+            target={puzzle?.target}
+            pivotCells={pivotCells}
+            revealedLetter={correctLetter}
+            answered={answered}
+            allLetters={puzzle?.allLetters}
+          />
         </div>
 
         <AnswerPad

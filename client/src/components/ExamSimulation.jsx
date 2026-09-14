@@ -309,14 +309,15 @@ export default function ExamSimulation({ onExit }) {
       </div>
 
       <div className="session-main-card">
-        {puzzle && !loading ? (
-          <Grid cols={puzzle.cols} cells={puzzle.cells} target={puzzle.target} pivotCells={[]} revealedLetter={null} answered={false} allLetters={puzzle.allLetters} />
-        ) : (
-          <div className="session-loading-state">
-            <div className="spinner" />
-            <span>Loading exam question...</span>
-          </div>
-        )}
+        <Grid
+          cols={puzzle?.cols}
+          cells={puzzle?.cells}
+          target={puzzle?.target}
+          pivotCells={[]}
+          revealedLetter={null}
+          answered={false}
+          allLetters={puzzle?.allLetters}
+        />
 
         <AnswerPad onSelect={handleSelect} disabled={answered || loading || !puzzle} selected={selected} correctLetter={null} />
 

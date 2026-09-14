@@ -217,22 +217,15 @@ export default function RapidFire({ onExit }) {
       </div>
 
       <div className="session-main-card">
-        {puzzle && !loading ? (
-          <Grid
-            cols={puzzle.cols}
-            cells={puzzle.cells}
-            target={puzzle.target}
-            pivotCells={[]}
-            revealedLetter={correctLetter}
-            answered={correctLetter !== null}
-            allLetters={puzzle.allLetters}
-          />
-        ) : (
-          <div className="session-loading-state">
-            <div className="spinner" />
-            <span>Loading…</span>
-          </div>
-        )}
+        <Grid
+          cols={puzzle?.cols}
+          cells={puzzle?.cells}
+          target={puzzle?.target}
+          pivotCells={[]}
+          revealedLetter={correctLetter}
+          answered={correctLetter !== null}
+          allLetters={puzzle?.allLetters}
+        />
 
         <AnswerPad
           onSelect={handleSelect}

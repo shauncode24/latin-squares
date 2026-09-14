@@ -199,22 +199,15 @@ export default function PracticeSession({ config, onExit }) {
       </div>
 
       <div className="session-main-card">
-        {puzzle && !loading ? (
-          <Grid
-            cols={puzzle.cols}
-            cells={puzzle.cells}
-            target={puzzle.target}
-            pivotCells={pivotCells}
-            revealedLetter={correctLetter}
-            answered={answered}
-            allLetters={puzzle.allLetters}
-          />
-        ) : (
-          <div className="session-loading-state">
-            <div className="spinner" />
-            <span>Loading deduction grid...</span>
-          </div>
-        )}
+        <Grid
+          cols={puzzle?.cols}
+          cells={puzzle?.cells}
+          target={puzzle?.target}
+          pivotCells={pivotCells}
+          revealedLetter={correctLetter}
+          answered={answered}
+          allLetters={puzzle?.allLetters}
+        />
 
         <AnswerPad
           onSelect={handleSelect}
