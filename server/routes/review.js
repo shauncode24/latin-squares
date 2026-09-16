@@ -31,6 +31,8 @@ router.get('/missed', async (req, res) => {
         selectedLetter: a.selectedLetter,
         correctLetter: a.correctLetter,
         solveQuality: a.solveQuality,
+        hintUsed: a.hintUsed,
+        hintRequestedAtMs: a.hintRequestedAtMs,
         elapsedMs: a.elapsedMs,
         createdAt: a.createdAt,
         puzzleSnapshot: a.puzzleSnapshot, // full grid — Review can now actually render it

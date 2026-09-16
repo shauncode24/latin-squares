@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Grid from './Grid';
 import AnswerPad from './AnswerPad';
 import { Icon } from './icons';
@@ -7,9 +7,15 @@ import { pivotLabel } from '../lib/format';
 
 const PIVOT_BANDS = [
   { key: 'any', label: 'Any', targetPivotDistance: null },
-  { key: 'near', label: 'Near pivot', targetPivotDistance: 1 },
-  { key: 'far', label: 'Distant pivot', targetPivotDistance: 4 },
+  { key: 'near', label: 'Near', targetPivotDistance: 1 },
+  { key: 'far', label: 'Distant', targetPivotDistance: 4 },
 ];
+
+const TIER_SHORT_TAGS = {
+  low: 'Direct read',
+  medium: '1 pivot',
+  high: '2–3 pivots',
+};
 
 // Soft, non-blocking nudge — never disables a tier, just informs.
 function tierRecommendationNote(tier, mastery) {
@@ -49,12 +55,14 @@ export default function NormalPractice({
   untimed,
   onToggleUntimed,
   explanation,
-  mastery,          // NEW: stats.mastery, optional
-  pivotBand,        // NEW: current pivot band key
-  onChangePivotBand,// NEW: (bandKey) => void
-  effectiveTargetMs,// NEW: adaptive target override, optional
-  isPersonalized,   // NEW: whether effectiveTargetMs came from personal data
+  mastery,          // stats.mastery, optional
+  pivotBand,        // current pivot band key
+  onChangePivotBand,// (bandKey) => void
+  effectiveTargetMs,// adaptive target override, optional
+  isPersonalized,   // whether effectiveTargetMs came from personal data
 }) {
+  const [showTierGuide, setShowTierGuide] = useState(false);
+
   useEffect(() => {
     function handleKeyDown(e) {
       if (e.key === 'Enter') {
@@ -68,30 +76,53 @@ export default function NormalPractice({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [loading, answered, puzzle, onNewGrid]);
 
+  const targetMs = effectiveTargetMs || 10000;
   const targetLabel = effectiveTargetMs
     ? `${Math.round(effectiveTargetMs / 1000)}s${isPersonalized ? ' (personal)' : ''}`
     : TIER_TARGET_LABEL[tier];
 
+  const elapsedSec = elapsed / 1000;
+  const targetSec = targetMs / 1000;
+  const deltaSec = elapsedSec - targetSec;
+
   return (
     <div className="drill-container">
+      {/* ─── Left Panel: Streamlined Difficulty & Pivot Selection ─── */}
       <aside className="drill-sidebar-left">
-        <div className="tiers">
+        <div className="tiers-header">
+          <span className="tiers-header-title">Difficulty</span>
+          <button
+            className={`tier-guide-toggle-btn${showTierGuide ? ' is-active' : ''}`}
+            onClick={() => setShowTierGuide((v) => !v)}
+            title={showTierGuide ? 'Hide difficulty descriptions' : 'Show difficulty guide'}
+          >
+            <Icon.Info />
+          </button>
+        </div>
+
+        <div className="tiers-compact-list">
           {TIERS.map((t) => {
             const note = tierRecommendationNote(t, mastery);
+            const isActive = t === tier;
             return (
               <button
                 key={t}
-                className={`tier-card${t === tier ? ' active' : ''}`}
+                className={`tier-card-compact${isActive ? ' active' : ''}`}
                 onClick={() => onChangeTier(t)}
-                title={note || undefined}
+                title={note || TIER_DESC[t]}
               >
-                <div className="tier-card-title">
-                  {TIER_LABEL[t]}
-                  {note && <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>⚠</span>}
+                <div className="tier-card-head">
+                  <span className="tier-card-title">{TIER_LABEL[t]}</span>
+                  <span className="tier-card-tag">{TIER_SHORT_TAGS[t]}</span>
+                  {note && <span className="tier-warning-badge" title={note}>⚠</span>}
                 </div>
-                <div className="tier-card-desc">{TIER_DESC[t]}</div>
-                {note && t !== tier && (
-                  <div style={{ fontSize: 10.5, marginTop: 4, opacity: 0.75 }}>{note}</div>
+                {showTierGuide && (
+                  <div className="tier-card-desc-collapsible">
+                    <p className="tier-card-desc">{TIER_DESC[t]}</p>
+                    {note && t !== tier && (
+                      <div className="tier-note-text">{note}</div>
+                    )}
+                  </div>
                 )}
               </button>
             );
@@ -99,7 +130,7 @@ export default function NormalPractice({
         </div>
 
         {tier !== 'low' && onChangePivotBand && (
-          <div className="session-option-group">
+          <div className="session-option-group compact-pivot-group">
             <div className="session-option-label">Pivot range</div>
             <div className="session-option-row">
               {PIVOT_BANDS.map((b) => (
@@ -116,23 +147,39 @@ export default function NormalPractice({
         )}
       </aside>
 
+      {/* ─── Center Hero: Status Bar, Grid & Answer Pad ─── */}
       <main className="drill-center">
-        <div className="status-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span>Target: {targetLabel}</span>
-            {puzzle && puzzle.rounds > 0 && (
-              <span style={{ fontSize: 11, color: 'var(--ink-soft)', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6, fontWeight: 500 }}>
-                {(puzzle.patternTag || '').replace(/-/g, ' ')} · {pivotLabel(puzzle.pivotDistance)}
+        <div className="status-row-enhanced">
+          <div className="status-meta">
+            <span className="status-pattern-chip">
+              <span className={`tier-badge-chip tier-${tier}`}>{TIER_LABEL[tier]}</span>
+              <span className="pattern-name">
+                {puzzle && puzzle.rounds > 0
+                  ? `${(puzzle.patternTag || '').replace(/-/g, ' ')} · ${pivotLabel(puzzle.pivotDistance)}`
+                  : 'Direct read'}
               </span>
-            )}
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', userSelect: 'none' }}>
+
+          <div className="status-timing-block">
+            <label className="untimed-toggle-label">
               <input type="checkbox" checked={!!untimed} onChange={onToggleUntimed} />
-              Untimed
+              <span>Untimed</span>
             </label>
+
             {!untimed && (
-              <span className={`time${overTime ? ' over' : ''}`}>{(elapsed / 1000).toFixed(1)}s</span>
+              <div className="timing-cluster">
+                <div className="timing-target-chip">
+                  <span className="timing-target-label">Target</span>
+                  <span className="timing-target-val">{targetLabel}</span>
+                </div>
+                <div className={`timing-live-chip${overTime ? ' is-over' : ''}`}>
+                  <span className="timing-live-val">{elapsedSec.toFixed(1)}s</span>
+                  {overTime && (
+                    <span className="timing-delta-badge">+{deltaSec.toFixed(1)}s</span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -185,26 +232,68 @@ export default function NormalPractice({
         )}
       </main>
 
+      {/* ─── Right Sidebar: Structured Actions Hierarchy ─── */}
       <aside className="drill-sidebar-right">
-        <div className="controls">
-          <button className="btn" onClick={onHint} disabled={!puzzle || loading}>
-            <Icon.Bulb /> Hint
-          </button>
-          <button className="btn" onClick={onReveal} disabled={answered || !puzzle || loading}>
-            <Icon.Eye /> Reveal
-          </button>
-          <button className="btn" onClick={onReview} disabled={loading || isGuest} title={isGuest ? 'Sign in to review missed puzzles' : ''}>
-            <Icon.History /> Review
-          </button>
-          <button className="btn" onClick={onLearn}>
-            <Icon.Book /> How to Solve
-          </button>
-          <button className="btn primary" onClick={onNewGrid} disabled={loading}>
-            <Icon.Refresh /> New grid
-          </button>
+        <div className="controls-header">
+          <span className="controls-header-title">Actions</span>
         </div>
 
-        <p className="controls-caption">Hint marks the attempt as hint-assisted. Reveal shows the answer without grading it.</p>
+        <div className="controls-structured">
+          {/* Primary Action */}
+          <div className="control-section primary-section">
+            {answered ? (
+              <button className="btn primary btn-next-grid" onClick={onNewGrid} disabled={loading}>
+                <Icon.Refresh />
+                <span>Next Grid</span>
+                <span className="kbd-shortcut-pill">↵ Enter</span>
+              </button>
+            ) : (
+              <button className="btn btn-hint-prominent" onClick={onHint} disabled={!puzzle || loading}>
+                <Icon.Bulb />
+                <span>Hint</span>
+              </button>
+            )}
+          </div>
+
+          {/* Secondary Actions: Learning & Review */}
+          <div className="control-section secondary-section">
+            <button className="btn btn-subtle-action" onClick={onLearn}>
+              <Icon.Book />
+              <span>How to Solve</span>
+            </button>
+            {answered && (
+              <button
+                className="btn btn-subtle-action"
+                onClick={onReview}
+                disabled={loading || isGuest}
+                title={isGuest ? 'Sign in to review missed puzzles' : ''}
+              >
+                <Icon.History />
+                <span>Review Misses</span>
+              </button>
+            )}
+          </div>
+
+          {/* Tertiary / Escape Actions (only active when solving) */}
+          {!answered && (
+            <div className="control-section escape-section">
+              <button className="btn btn-ghost-action" onClick={onNewGrid} disabled={loading}>
+                <Icon.Refresh />
+                <span>Skip Grid</span>
+              </button>
+              <button className="btn btn-ghost-action btn-reveal-text" onClick={onReveal} disabled={!puzzle || loading}>
+                <Icon.Eye />
+                <span>Reveal Answer</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <p className="controls-caption">
+          {answered
+            ? 'Press Enter (↵) to load next puzzle.'
+            : 'Hint marks attempt assisted. Reveal unveils without grading.'}
+        </p>
       </aside>
     </div>
   );
